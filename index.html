@@ -255,6 +255,42 @@
   .modeCard .mName{font-weight:bold;color:var(--gold);margin-top:4px;font-size:14px;letter-spacing:1px}
   .modeCard .mTip{color:#888;font-size:11px;margin-top:2px}
 
+  /* 三段操作说明：默认全部隐藏，由 body.mode-* 决定显示哪一段 */
+  #modeHelp{margin:6px auto 8px;max-width:560px}
+  #modeHelp .modeHelpBlock{display:none;background:rgba(0,0,0,.35);border:1px solid #3a2f18;
+                           border-radius:6px;padding:10px 14px;text-align:left}
+  #modeHelp .modeHelpBlock p{font-size:13px;line-height:1.8;color:#ddd}
+  body.mode-kbm   #modeHelp .modeHelpBlock[data-mode="kbm"]  {display:block}
+  body.mode-pad   #modeHelp .modeHelpBlock[data-mode="pad"]  {display:block}
+  body.mode-touch #modeHelp .modeHelpBlock[data-mode="touch"]{display:block}
+
+  /* 确定按钮 */
+  .confirmBtn{display:block;margin:14px auto 4px;padding:12px 36px;
+              background:linear-gradient(180deg,#5a3a14 0%,#241408 100%);
+              border:2px solid var(--gold);border-radius:6px;color:var(--gold);
+              font-size:16px;font-weight:bold;letter-spacing:4px;cursor:pointer;
+              box-shadow:0 0 14px rgba(232,196,90,.45);transition:all .15s ease}
+  .confirmBtn:hover{background:linear-gradient(180deg,#7a4f1c 0%,#341a0a 100%);
+                    box-shadow:0 0 22px rgba(232,196,90,.7);transform:translateY(-1px)}
+  .confirmBtn:active{transform:scale(.97)}
+
+  /* 暂停 / 死亡 overlay：隐藏模式选择和模式说明，仅显示对应提示 */
+  #pauseInfo{display:none;font-size:13px;line-height:1.8;color:#ddd;max-width:520px;margin:8px auto;
+             background:rgba(0,0,0,.35);border:1px solid #3a2f18;border-radius:6px;padding:10px 14px}
+  #overlay.ov-pause #modeSelect,
+  #overlay.ov-pause #modeHelp,
+  #overlay.ov-pause #modeHint,
+  #overlay.ov-pause #autoTip,
+  #overlay.ov-death #modeSelect,
+  #overlay.ov-death #modeHelp,
+  #overlay.ov-death #modeHint,
+  #overlay.ov-death #autoTip{display:none}
+  #overlay.ov-pause #pauseInfo,
+  #overlay.ov-death #pauseInfo{display:block}
+  /* 死亡态隐藏"确定"按钮（用 overlay 整屏点击复活） */
+  #overlay.ov-death #btnConfirmMode{display:none}
+  /* 暂停态：确定按钮仍显示，文本由 JS 改成"继续游戏" */
+
   /* ========== 触屏控件（默认隐藏，body.mode-touch 时显示） ========== */
   #touchLayer{display:none;position:fixed;inset:0;z-index:7;pointer-events:none}
   body.mode-touch #touchLayer{display:block}
@@ -469,15 +505,42 @@
     <div class="modeCard" data-mode="pad"><div class="mIco">🎮</div><div class="mName">PC 手柄</div><div class="mTip">摇杆 + 扳机</div></div>
     <div class="modeCard" data-mode="touch"><div class="mIco">📱</div><div class="mName">手机竖屏</div><div class="mTip">虚拟摇杆 + 触屏</div></div>
   </div>
-  <p id="modeHint" style="color:#aaa;font-size:12px;margin-bottom:8px">请先选择操作模式（已自动检测推荐）</p>
-  <p>第一人称视角 · <b>自动战斗</b> ARPG 原型<br/>
-  <span class="key">WASD</span> 移动　<span class="key">Shift</span> 跑步开关　<span class="key">空格</span> 跳　<span class="key">T</span> 托管　<span class="key">M</span> 静音<br/>
-  <span class="key">F</span> 拾取　<span class="key">I</span> 背包　<span class="key">Q</span> 喝🧪生命药水　<span class="key">E</span> 喝🧴法力药水　<span class="key">1-8</span> 切技能<br/>
-  <span style="color:#7bd96a">🎮 手柄</span>　左摇杆 移动 · 右摇杆 视角 · L3 跑步开关 · A 跳 · X 拾取 · Y 背包 · LB 喝🧪 · RB 喝🧴 · D-Pad ←→ 切技能 · RT 释放技能 · LT 看技能描述 · Start 开始<br/>
-  <span style="color:#5aa6ff">📱 手机</span>　左下虚拟摇杆移动，右上半屏滑动转视角，右下大圆攻击；中间按钮跳/拾/喝药/背包；技能条 tap 切换并施放，长按看描述<br/>
-  武器会<b>自动锁定视野内最近的敌人</b>并释放技能，你只需走位、抉择构筑。<br/><br/>
-  点击屏幕（或手柄 Start / 手机点开始）开始 · 按 ESC 释放鼠标<br/>
-  <span style="color:#888;font-size:11px">提示：手柄需先按任意键唤醒；若在 IDE 预览面板里点击无反应，请用浏览器打开 index.html</span></p>
+  <p id="modeHint" style="color:#aaa;font-size:12px;margin-bottom:6px">请先选择操作模式（已自动检测推荐）</p>
+
+  <!-- 三段操作说明：仅显示当前模式对应的一段 -->
+  <div id="modeHelp">
+    <div class="modeHelpBlock" data-mode="kbm">
+      <p>第一人称视角 · <b>自动战斗</b> ARPG 原型<br/>
+      <span class="key">WASD</span> 移动　<span class="key">Shift</span> 跑步开关　<span class="key">空格</span> 跳　<span class="key">T</span> 托管　<span class="key">M</span> 静音<br/>
+      <span class="key">F</span> 拾取　<span class="key">I</span> 背包　<span class="key">Q</span> 喝🧪生命药水　<span class="key">E</span> 喝🧴法力药水　<span class="key">1-8</span> 切技能<br/>
+      <span class="key">鼠标左键</span> 释放技能　<span class="key">ESC</span> 暂停 / 释放鼠标</p>
+    </div>
+    <div class="modeHelpBlock" data-mode="pad">
+      <p><span style="color:#7bd96a">🎮 PC 手柄</span><br/>
+      左摇杆 <b>移动</b> · 右摇杆 <b>视角</b> · L3 <b>跑步开关</b><br/>
+      <b>A</b> 跳　<b>X</b> 拾取　<b>Y</b> 背包<br/>
+      <b>LB</b> 喝🧪生命　<b>RB</b> 喝🧴法力<br/>
+      <b>D-Pad ←→</b> 切技能　<b>RT</b> 释放技能　<b>LT</b> 看技能描述<br/>
+      <b>Start</b> 开始 / 暂停　<b>Back</b> 托管开关</p>
+    </div>
+    <div class="modeHelpBlock" data-mode="touch">
+      <p><span style="color:#5aa6ff">📱 手机竖屏</span><br/>
+      左下 <b>虚拟摇杆</b> 移动　右上半屏 <b>滑动</b> 转视角<br/>
+      右下 <b>大圆「攻击」</b> 释放当前技能<br/>
+      中下功能键：<b>跳 / 背包 / 托管 / 暂停</b><br/>
+      <b>🧪血</b> · <b>🧴蓝</b> 直接喝药　走过自动拾取<br/>
+      技能槽 <b>tap</b> 切换并施放　<b>长按</b> 看技能描述</p>
+    </div>
+  </div>
+
+  <p id="autoTip" style="color:#aaa;font-size:11px;margin:6px 0">武器会 <b style="color:#fff">自动锁定视野内最近的敌人</b> 并释放技能，你只需走位、抉择构筑。</p>
+
+  <!-- 暂停/死亡时显示的提示文本（默认隐藏） -->
+  <p id="pauseInfo"></p>
+
+  <!-- 确定按钮 -->
+  <button id="btnConfirmMode" class="confirmBtn">✓ 确 定 · 开 始 游 戏</button>
+
   <p id="loadStatus" style="color:#ff8a8a;font-size:12px;margin-top:10px;display:none"></p>
   <div id="saveLoadBar">
     <button id="btnSave" class="slBtn">💾 保存进度</button>

@@ -1171,12 +1171,14 @@ function showPauseOverlay(){
   overlay.classList.remove('ov-death');
   overlay.classList.add('ov-pause');
   const h1 = overlay.querySelector('h1');
-  const p  = overlay.querySelector('p');
   if(h1) h1.textContent='⏸ 已 暂 停';
-  if(p) p.innerHTML =
-    '游戏已暂停。<br/>点击屏幕（或手柄按 <span class="key">Start</span>）<b>继续游戏</b><br/>'+
-    '按 <span class="key">ESC</span> 释放鼠标 · 按 <span class="key">I</span> 打开背包<br/><br/>'+
+  const info = document.getElementById('pauseInfo');
+  if(info) info.innerHTML =
+    '游戏已暂停。<br/>点击 <b style="color:var(--gold)">「继续游戏」</b> 按钮（手柄按 <span class="key">Start</span>）恢复<br/>'+
+    '按 <span class="key">ESC</span> 释放鼠标 · 按 <span class="key">I</span> 打开背包<br/>'+
     '<span style="color:#888;font-size:11px">可在下方保存 / 读取进度</span>';
+  const btn = document.getElementById('btnConfirmMode');
+  if(btn) btn.textContent = '▶ 继 续 游 戏';
   const slBar = document.getElementById('saveLoadBar');
   if(slBar) slBar.style.display='flex';
 }
@@ -1185,9 +1187,9 @@ function showDeathOverlay(){
   overlay.classList.remove('ov-pause');
   overlay.classList.add('ov-death');
   const h1 = overlay.querySelector('h1');
-  const p  = overlay.querySelector('p');
   if(h1) h1.textContent='💀 你 死 了';
-  if(p) p.innerHTML =
+  const info = document.getElementById('pauseInfo');
+  if(info) info.innerHTML =
     `你倒在了血色荒野。<br/>等级：Lv.${player.level}　击杀：${player.killCount}<br/><br/>`+
     '<b style="color:#ff8a8a">点击屏幕（或手柄 Start）复活</b><br/>'+
     '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌</span>';
@@ -1199,6 +1201,9 @@ function clearOverlayState(){
   overlay.classList.remove('ov-pause','ov-death');
   const slBar = document.getElementById('saveLoadBar');
   if(slBar) slBar.style.display='flex';
+  // 恢复确定按钮的初始文案（开始游戏前显示）
+  const btn = document.getElementById('btnConfirmMode');
+  if(btn) btn.textContent = '✓ 确 定 · 开 始 游 戏';
 }
 
 
@@ -1451,6 +1456,8 @@ function startOrResumeGame(){
   overlay.style.display = 'none';
   const h1 = overlay.querySelector('h1');
   if(h1) h1.textContent = 'DIABLO · FPS · AUTO';
+  // 清除暂停/死亡 overlay 的 class，恢复确定按钮初始文案
+  if(typeof clearOverlayState==='function') clearOverlayState();
   _justStartedAt = performance.now();
 
   // ② 启动音频（用户手势内，AudioContext 才允许 resume）
@@ -1469,21 +1476,24 @@ function startOrResumeGame(){
   setTimeout(()=>{ _starting = false; }, 250);
 }
 
-// 双保险：mousedown / pointerdown / click 任一触发都能开始
-// 不调用 preventDefault，保留浏览器对 PointerLock 用户手势的判定
+// 开始游戏：必须点击"确定"按钮（或按 Space/Enter）后才进入
+// 这样玩家有机会先选择操作模式再开始，避免误触
 function _overlayHandler(ev){
   if(player._dead) return; // 死亡画面用 overlay.onclick
-  // 死亡画面通过 overlay.onclick 直接触发，不走这里；这里只处理开始/恢复
   startOrResumeGame();
 }
-overlay.addEventListener('mousedown', _overlayHandler);
-overlay.addEventListener('click',     _overlayHandler);
-overlay.addEventListener('touchstart', _overlayHandler, {passive:true});
-// 键盘兜底：在开始/暂停菜单上按 任意键 / 空格 / 回车 也能开始
+// 确定按钮（开始菜单核心入口）
+const _btnConfirmMode = document.getElementById('btnConfirmMode');
+if(_btnConfirmMode){
+  const startFn = (e)=>{ e && e.stopPropagation(); _overlayHandler(e); };
+  _btnConfirmMode.addEventListener('click',     startFn);
+  _btnConfirmMode.addEventListener('touchstart',startFn, {passive:true});
+}
+// 键盘兜底：开始/暂停菜单上按 Space/Enter 视为"确定开始"
 window.addEventListener('keydown', (e)=>{
   if(overlay.style.display==='none') return;
   if(player._dead) return;
-  if(e.code==='Space' || e.code==='Enter' || e.code==='KeyW' || e.code==='KeyA' || e.code==='KeyS' || e.code==='KeyD'){
+  if(e.code==='Space' || e.code==='Enter'){
     startOrResumeGame();
   }
 });
@@ -1502,8 +1512,8 @@ controls.addEventListener('unlock',()=>{
   if(performance.now() - _justStartedAt < 600) return;
   // ESC 解锁鼠标 = 暂停 + 弹菜单
   gamePaused = true;
-  overlay.style.display='flex';
-  overlay.querySelector('h1').textContent='已 暂 停';
+  if(typeof showPauseOverlay==='function') showPauseOverlay();
+  else { overlay.style.display='flex'; }
 });
 
 // ---------- 技能 ----------
@@ -5660,11 +5670,11 @@ function update(dt){
         // 死亡画面下：等同于点击复活
         if(overlay.onclick){ const fn=overlay.onclick; overlay.onclick=null; fn(); }
       } else {
-        // 游戏运行中按 Start → 暂停游戏 + 弹开始菜单
+        // 游戏运行中按 Start → 暂停游戏 + 弹暂停菜单
         gamePaused = true;
-        overlay.style.display = 'flex';
-        overlay.querySelector('h1').textContent = '已 暂 停';
         controls.unlock();
+        if(typeof showPauseOverlay==='function') showPauseOverlay();
+        else { overlay.style.display = 'flex'; }
       }
     }
     // Y = 切换背包（手柄触发，会隐藏鼠标）
