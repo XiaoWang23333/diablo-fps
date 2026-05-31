@@ -259,35 +259,39 @@
   #touchLayer{display:none;position:fixed;inset:0;z-index:7;pointer-events:none}
   body.mode-touch #touchLayer{display:block}
   /* 虚拟摇杆：左下，固定圆形底盘 */
-  #tStick{position:absolute;left:calc(28px + var(--safe-l));bottom:calc(120px + var(--safe-b));
-          width:140px;height:140px;border:2px solid rgba(232,196,90,.4);border-radius:50%;
+  #tStick{position:absolute;left:calc(22px + var(--safe-l));bottom:calc(70px + var(--safe-b));
+          width:130px;height:130px;border:2px solid rgba(232,196,90,.4);border-radius:50%;
           background:rgba(0,0,0,.35);pointer-events:auto;touch-action:none}
-  #tStick .knob{position:absolute;left:50%;top:50%;width:60px;height:60px;border-radius:50%;
+  #tStick .knob{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;
                 background:rgba(232,196,90,.6);transform:translate(-50%,-50%);box-shadow:0 0 12px rgba(0,0,0,.7)}
   /* 主攻击键：右下大圆 */
-  #tCast{position:absolute;right:calc(24px + var(--safe-r));bottom:calc(110px + var(--safe-b));
-         width:120px;height:120px;border-radius:50%;border:3px solid var(--gold);
+  #tCast{position:absolute;right:calc(22px + var(--safe-r));bottom:calc(80px + var(--safe-b));
+         width:108px;height:108px;border-radius:50%;border:3px solid var(--gold);
          background:radial-gradient(circle,rgba(232,80,80,.55) 0%,rgba(80,20,20,.7) 80%);
          color:#fff;font-size:16px;font-weight:bold;letter-spacing:2px;
          display:flex;align-items:center;justify-content:center;pointer-events:auto;
          box-shadow:0 0 16px rgba(255,80,80,.6) inset,0 0 12px rgba(232,196,90,.5)}
   #tCast:active{transform:scale(.95)}
-  #tCast .cd{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:11px;color:#ffd97a}
-  /* 中部小按钮（跳/拾/喝药/背包/暂停） */
-  .tBtn{position:absolute;width:54px;height:54px;border-radius:50%;border:2px solid #6b5a2b;
-        background:rgba(20,16,11,.85);color:#ddd;font-size:18px;display:flex;align-items:center;justify-content:center;
+  #tCast .cd{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;color:#ffd97a}
+  /* 中部小按钮（跳/喝药/背包/暂停/托管），统一更小 + 居中横排 */
+  .tBtn{position:absolute;width:46px;height:46px;border-radius:50%;border:2px solid #6b5a2b;
+        background:rgba(20,16,11,.85);color:#ddd;font-size:16px;display:flex;align-items:center;justify-content:center;
         pointer-events:auto;box-shadow:0 0 8px rgba(0,0,0,.7)}
   .tBtn:active{transform:scale(.92);border-color:var(--gold)}
-  .tBtn .lbl{position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:10px;color:#888}
-  #tJump  {right:calc(170px + var(--safe-r));bottom:calc(180px + var(--safe-b))}
-  #tPick  {right:calc(170px + var(--safe-r));bottom:calc(120px + var(--safe-b))}
-  #tHp    {right:calc(160px + var(--safe-r));bottom:calc(50px  + var(--safe-b))}
-  #tMp    {right:calc(95px  + var(--safe-r));bottom:calc(50px  + var(--safe-b))}
-  #tInv   {left:calc(190px + var(--safe-l));bottom:calc(48px  + var(--safe-b))}
-  #tPause {left:calc(252px + var(--safe-l));bottom:calc(48px  + var(--safe-b))}
+  .tBtn .lbl{position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);font-size:9px;color:#aaa;white-space:nowrap}
+  /* 中下功能键横排：跳/背包/托管/暂停（在技能条下方、摇杆与攻击键上方的"中区"） */
+  /* 用 transform:translateX(-50%) 保证居中，bottom 高度避开摇杆/攻击键顶部 */
+  #tFnRow{position:absolute;left:50%;bottom:calc(168px + var(--safe-b));transform:translateX(-50%);
+          display:flex;gap:14px;pointer-events:none}
+  #tFnRow .tBtn{position:relative;left:0;right:0;bottom:0}
+  /* 血/蓝瓶：分别贴在摇杆和攻击键的内侧上方，离主控件远一点避免误触 */
+  #tHp{left:calc(160px + var(--safe-l));bottom:calc(110px + var(--safe-b))}
+  #tMp{right:calc(140px + var(--safe-r));bottom:calc(110px + var(--safe-b))}
   /* 蓝/红药水按钮配色 */
-  #tHp{border-color:#ff5070}
-  #tMp{border-color:#5aa6ff}
+  #tHp{border-color:#ff5070;color:#ff8080}
+  #tMp{border-color:#5aa6ff;color:#a0c8ff}
+  /* 托管按钮激活态高亮 */
+  #tAuto.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
   /* 触屏模式：HUD 紧凑、隐藏侧栏式信息 */
@@ -301,7 +305,7 @@
   body.mode-touch #questPanel{display:none}   /* 触屏默认折叠任务（点击图标再展开，留作后续） */
   body.mode-touch #padRow{display:none}
   body.mode-touch #hud{padding:0;background:none}
-  body.mode-touch #skillbar{position:fixed;bottom:calc(244px + var(--safe-b));left:0;right:0;
+  body.mode-touch #skillbar{position:fixed;bottom:calc(220px + var(--safe-b));left:0;right:0;
                             display:flex;justify-content:center;pointer-events:none;z-index:8}
   body.mode-touch #skills{gap:6px;max-width:96vw;justify-content:center;flex-wrap:nowrap}
   body.mode-touch .slot{width:50px;height:50px;font-size:9px;pointer-events:auto}
@@ -446,12 +450,16 @@
 <div id="touchLayer">
   <div id="tStick"><div class="knob"></div></div>
   <button id="tCast" class="tCastBtn">攻击<div class="cd" id="tCastCd"></div></button>
-  <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
-  <button id="tPick"  class="tBtn">✋<span class="lbl">拾</span></button>
+  <!-- 血/蓝瓶：贴在主控件内侧 -->
   <button id="tHp"    class="tBtn">🧪<span class="lbl">血</span></button>
   <button id="tMp"    class="tBtn">🧴<span class="lbl">蓝</span></button>
-  <button id="tInv"   class="tBtn">🎒<span class="lbl">背包</span></button>
-  <button id="tPause" class="tBtn">⏸<span class="lbl">暂停</span></button>
+  <!-- 中下功能键行：跳 / 背包 / 托管 / 暂停 -->
+  <div id="tFnRow">
+    <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
+    <button id="tInv"   class="tBtn">🎒<span class="lbl">背包</span></button>
+    <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
+    <button id="tPause" class="tBtn">⏸<span class="lbl">暂停</span></button>
+  </div>
 </div>
 
 <div id="overlay">

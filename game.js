@@ -1365,10 +1365,15 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
       player.vel.y = 6; player.onGround = false;
     }
   });
-  bind('tPick', ()=>{ if(typeof tryPickup==='function') tryPickup(); });
   bind('tHp',   ()=>{ if(typeof quickDrinkHp==='function') quickDrinkHp(); });
   bind('tMp',   ()=>{ if(typeof quickDrinkMp==='function') quickDrinkMp(); });
   bind('tInv',  ()=>{ if(typeof toggleInv==='function') toggleInv(true); });
+  bind('tAuto', ()=>{
+    if(typeof toggleAutoPlay==='function') toggleAutoPlay();
+    // 同步按钮高亮态
+    const btn = document.getElementById('tAuto');
+    if(btn) btn.classList.toggle('on', !!(settings && settings.autoPlay));
+  });
   bind('tPause',()=>{
     if(player._dead) return;
     if(gamePaused){
