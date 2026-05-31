@@ -79,8 +79,16 @@
   #equipPanel .eq-row span:hover{background:rgba(232,196,90,.12);outline:1px solid rgba(232,196,90,.4);border-radius:3px}
   #equipPanel .eq-row b{color:var(--gold);min-width:60px}
   .tip{position:fixed;background:#080808;border:1px solid #6b5a2b;padding:8px 10px;font-size:12px;color:#ddd;pointer-events:none;z-index:30;max-width:260px;line-height:1.5;display:none}
-  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ddd;text-align:center;cursor:pointer}
-  #overlay h1{font-size:48px;color:var(--gold);letter-spacing:6px;text-shadow:0 0 18px rgba(232,196,90,.6);margin-bottom:14px}
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;color:#ddd;text-align:center;cursor:pointer;
+            padding:calc(20px + var(--safe-t)) 12px calc(20px + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #overlay h1{font-size:36px;color:var(--gold);letter-spacing:4px;text-shadow:0 0 18px rgba(232,196,90,.6);margin:6px 0 10px;line-height:1.1}
+  /* 手机竖屏标题进一步缩小，留空间给确定按钮和说明 */
+  body.mode-touch #overlay h1{font-size:24px;letter-spacing:2px;margin:4px 0 8px}
+  body.mode-touch .modeCard{min-width:96px;padding:10px 10px}
+  body.mode-touch .modeCard .mIco{font-size:24px}
+  body.mode-touch .modeCard .mName{font-size:13px}
+  body.mode-touch .modeCard .mTip{font-size:10px}
+  body.mode-touch #modeHelp .modeHelpBlock p{font-size:12px;line-height:1.7}
   #overlay p{font-size:14px;line-height:2;color:#bbb;max-width:560px}
   #overlay .key{color:var(--gold)}
   /* overlay 三态视觉区分：暂停=蓝调，死亡=红调脉冲 */
@@ -432,7 +440,10 @@
   <div class="orb mp"><div class="fill" id="mpFill" style="height:100%"></div><div class="lbl" id="mpLbl">50/50</div></div>
 </div>
 <div id="invPanel">
-  <h3>背包 / 装备  &nbsp;&nbsp;<span id="invHint">左键穿戴 · 右键丢弃 · 装备栏右键卸下 · R 整理 · I 关闭　🎮 摇杆/D-Pad 移动 · A 穿戴 · X 丢弃 · LB 自动换装 · RB 5合1 · Back 整理 · Y/B 关闭</span></h3>
+  <h3 style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <span>背包 / 装备&nbsp;<span id="invHint" style="font-weight:normal;color:#aaa;font-size:11px">左键穿戴 · 右键丢弃 · I 关闭</span></span>
+    <span class="closeBtn" id="invCloseBtn" style="cursor:pointer;color:#ccc;font-size:13px;padding:4px 10px;border:1px solid #6b5a2b;border-radius:4px;background:#241c10">✕ 关闭</span>
+  </h3>
   <div id="equipPanel">
     <div class="eq-row"><b>武器</b><span id="eqWeapon">—</span></div>
     <div class="eq-row"><b>头盔</b><span id="eqHelm">—</span></div>

@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.24.0';
-const GAME_BUILD   = '2026-05-30';
+const GAME_VERSION = 'v0.25.0';
+const GAME_BUILD   = '2026-06-01';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -102,13 +102,19 @@ const Audio = (function(){
   let bgmStarted=false, bgmNodes=[];
   let muted=false, bgmVol=0.18, sfxVol=0.5;
   function ensure(){
-    if(ctx) return ctx;
+    if(ctx){
+      // 移动端关键：每次进入用户手势上下文都要尝试 resume，否则 ctx 一直 suspended
+      try{ if(ctx.state==='suspended') ctx.resume(); }catch(_){}
+      return ctx;
+    }
     try{
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
       master = ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
       bgmGain = ctx.createGain(); bgmGain.gain.value=bgmVol; bgmGain.connect(master);
       sfxGain = ctx.createGain(); sfxGain.gain.value=sfxVol; sfxGain.connect(master);
+      // iOS Safari：必须在用户手势内 resume 才能出声
+      try{ if(ctx.state==='suspended') ctx.resume(); }catch(_){}
     } catch(_){ ctx=null; }
     return ctx;
   }
@@ -1439,6 +1445,23 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
     }, {passive:true});
     skillsEl.addEventListener('touchcancel', cancel, {passive:true});
   }
+
+  // 触屏：在背包空白区域 / 面板空白区域点一下，关闭 tip
+  // 装备/宝石的具体格子各自有 click handler，会先消费事件不会冒泡到这里
+  const dismissTipPanels = ['invPanel','fusePanel','gemUsePanel','socketPanel'];
+  dismissTipPanels.forEach(pid=>{
+    const el = document.getElementById(pid);
+    if(!el) return;
+    el.addEventListener('touchstart', (e)=>{
+      if(InputMode.current!=='touch') return;
+      // 只有点到面板背景/空白处才隐藏 tip（点到 .invSlot/.gemUseEq 等会自己 stopPropagation 的不会进来）
+      if(typeof hideTip==='function') hideTip();
+    }, {passive:true});
+    el.addEventListener('click', (e)=>{
+      if(InputMode.current!=='touch') return;
+      if(typeof hideTip==='function') hideTip();
+    });
+  });
 })();
 
 
@@ -1485,9 +1508,25 @@ function _overlayHandler(ev){
 // 确定按钮（开始菜单核心入口）
 const _btnConfirmMode = document.getElementById('btnConfirmMode');
 if(_btnConfirmMode){
-  const startFn = (e)=>{ e && e.stopPropagation(); _overlayHandler(e); };
+  let _confirmFiring = false;
+  const startFn = (e)=>{
+    if(e){ e.stopPropagation(); if(e.preventDefault) e.preventDefault(); }
+    if(_confirmFiring) return;
+    _confirmFiring = true;
+    _overlayHandler(e);
+    // 防点击穿透：触屏点击后 350ms 内忽略下层 mouse/click（避免 touchend 触发的 ghost click 打到下方按钮）
+    const blocker = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); };
+    document.addEventListener('click',     blocker, true);
+    document.addEventListener('mousedown', blocker, true);
+    setTimeout(()=>{
+      document.removeEventListener('click',     blocker, true);
+      document.removeEventListener('mousedown', blocker, true);
+      _confirmFiring = false;
+    }, 350);
+  };
   _btnConfirmMode.addEventListener('click',     startFn);
-  _btnConfirmMode.addEventListener('touchstart',startFn, {passive:true});
+  // touchstart 用非 passive 才能 preventDefault 阻止后续 ghost click
+  _btnConfirmMode.addEventListener('touchstart',startFn, {passive:false});
 }
 // 键盘兜底：开始/暂停菜单上按 Space/Enter 视为"确定开始"
 window.addEventListener('keydown', (e)=>{
@@ -4187,7 +4226,13 @@ function toggleInv(byPad){
     padCursor=-1;
     hideTip();
     document.body.classList.remove('pad-inv-open');
-    controls.lock();
+    // 触屏模式：不请求 PointerLock，直接走 fallback 标记为已锁定
+    if(InputMode && InputMode.current==='touch'){
+      controls._fallback = true;
+      if(!controls.isLocked){ controls.isLocked = true; controls._emit && controls._emit('lock'); }
+    } else {
+      controls.lock();
+    }
   } else {
     // ---- 打开背包 ----
     Audio.uiOpen();
@@ -5635,6 +5680,16 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
 {
   const cb = document.getElementById('fuseCloseBtn');
   if(cb) cb.addEventListener('click', ()=>{ if(!_fuseAnimating) closeFusePanel(); });
+  // 背包关闭按钮
+  const invCb = document.getElementById('invCloseBtn');
+  if(invCb){
+    const closeFn = (e)=>{
+      e && e.stopPropagation && e.stopPropagation();
+      if(typeof toggleInv==='function' && invPanel && invPanel.style.display==='block') toggleInv();
+    };
+    invCb.addEventListener('click', closeFn);
+    invCb.addEventListener('touchstart', closeFn, {passive:true});
+  }
   document.addEventListener('keydown', (e)=>{
     if(fusePanelEl.style.display!=='flex') return;
     if(_fuseAnimating) return;
