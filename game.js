@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.25.0';
-const GAME_BUILD   = '2026-06-01';
+const GAME_VERSION = 'v0.26.0';
+const GAME_BUILD   = '2026-06-02';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -590,6 +590,15 @@ viewWeaponRig.add(viewWeaponHand);
 // 默认放在右下，距相机 0.5m
 viewWeaponRig.position.set(0.32, -0.32, -0.55);
 camera.add(viewWeaponRig);
+// 触屏模式：屏幕底部被功能键占用较多，武器整体往左挪一点更自然
+function adjustViewWeaponForMode(){
+  if(!viewWeaponRig) return;
+  if(InputMode && InputMode.current==='touch'){
+    viewWeaponRig.position.set(-0.05, -0.30, -0.55);
+  } else {
+    viewWeaponRig.position.set(0.32, -0.32, -0.55);
+  }
+}
 // 把 camera 加进 scene 一次（PointerLockControls 已经把它加到 yawObject，
 // 但 yawObject 已经 add(camera)，所以 camera 已在场景图中——直接挂 viewWeaponRig 即可）
 
@@ -1027,7 +1036,7 @@ const player={
   hp:100,hpMax:100,mp:50,mpMax:50,
   level:1,exp:0,expNeed:50,
   str:10,dex:10,int:10,armor:0,
-  vel:new THREE.Vector3(),onGround:true,killCount:0,invuln:0,
+  vel:new THREE.Vector3(),onGround:true,killCount:0,deathCount:0,invuln:0,
   hpRegen:1.2,mpRegen:3,
   // 防御性技能状态：护盾吸收值 / 护盾剩余时间 / 减伤姿态剩余时间 / 当前减伤比例
   shield:0,shieldMax:0,shieldT:0,hasteT:0,dmgReduce:0,
@@ -1196,12 +1205,12 @@ function showDeathOverlay(){
   if(h1) h1.textContent='💀 你 死 了';
   const info = document.getElementById('pauseInfo');
   if(info) info.innerHTML =
-    `你倒在了血色荒野。<br/>等级：Lv.${player.level}　击杀：${player.killCount}<br/><br/>`+
+    `你倒在了血色荒野。<br/>等级：Lv.${player.level}　击杀：${player.killCount}　<b style="color:#ff8a8a">死亡：${player.deathCount||1}</b><br/><br/>`+
     '<b style="color:#ff8a8a">点击屏幕（或手柄 Start）复活</b><br/>'+
-    '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌</span>';
-  // 死亡时隐藏存读档按钮，避免与"复活点击"混淆
+    '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌；或点击下方「读取存档」回到上次存档点</span>';
+  // 死亡时仍显示存读档按钮（玩家可以选择从上次存档复活）
   const slBar = document.getElementById('saveLoadBar');
-  if(slBar) slBar.style.display='none';
+  if(slBar) slBar.style.display='flex';
 }
 function clearOverlayState(){
   overlay.classList.remove('ov-pause','ov-death');
@@ -1245,16 +1254,19 @@ const InputMode = {
     document.querySelectorAll('.modeCard').forEach(el=>{
       el.classList.toggle('active', el.dataset.mode===mode);
     });
-    // 触屏模式下渲染降级
+    // 触屏模式下渲染降级 + 强制开启自动施放（没有手动攻击键）
     if(mode==='touch'){
       try{ renderer.setPixelRatio(Math.min(devicePixelRatio||1, 1.25)); }catch(_){}
       try{ renderer.shadowMap.enabled = false; }catch(_){}
       if(scene && scene.fog){ scene.fog.far = 100; }   // 远雾拉近，省 GPU
+      try{ if(typeof settings!=='undefined') settings.autoSkill = true; }catch(_){}
     } else {
       try{ renderer.setPixelRatio(devicePixelRatio||1); }catch(_){}
       try{ renderer.shadowMap.enabled = true; }catch(_){}
       if(scene && scene.fog){ scene.fog.far = 160; }
     }
+    // 武器视位置随模式调整
+    if(typeof adjustViewWeaponForMode==='function') adjustViewWeaponForMode();
   },
   init(){
     let saved = null;
@@ -1280,88 +1292,49 @@ InputMode.init();
 //   - 左下虚拟摇杆 → touchInput.lx / ly （归一化 -1..1）
 //   - 右上半屏滑动 → 直接更新 _yawObject.rotation.y 与 camera.x 旋转
 //   - 各按钮：跳/拾/喝药/背包/暂停/攻击 → 直接调对应函数
-const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
+const touchInput = { lx:0, ly:0, rx:0, ry:0 };
 (function initTouchControls(){
-  // 摇杆
-  const stick = document.getElementById('tStick');
-  const knob  = stick && stick.querySelector('.knob');
-  let stickId = -1, sx0=0, sy0=0;
-  const STICK_R = 60;        // 摇杆最大半径
-  if(stick){
+  // 通用摇杆构造：返回 stickId getter 用于过滤别处事件
+  const STICK_R = 50;
+  function makeStick(id, axis){
+    const stick = document.getElementById(id);
+    if(!stick) return ()=>-1;
+    const knob = stick.querySelector('.knob');
+    let sid = -1, sx0=0, sy0=0;
     stick.addEventListener('touchstart', (e)=>{
-      const t = e.changedTouches[0]; stickId = t.identifier;
+      const t = e.changedTouches[0]; sid = t.identifier;
       const r = stick.getBoundingClientRect();
       sx0 = r.left + r.width/2; sy0 = r.top + r.height/2;
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
     }, {passive:false});
-    const move = (e)=>{
+    stick.addEventListener('touchmove', (e)=>{
       for(const t of e.changedTouches){
-        if(t.identifier!==stickId) continue;
+        if(t.identifier!==sid) continue;
         let dx = t.clientX - sx0, dy = t.clientY - sy0;
         const d = Math.hypot(dx,dy);
         if(d>STICK_R){ dx*=STICK_R/d; dy*=STICK_R/d; }
         knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-        touchInput.lx =  dx / STICK_R;
-        touchInput.ly =  dy / STICK_R;
+        touchInput[axis+'x'] = dx / STICK_R;
+        touchInput[axis+'y'] = dy / STICK_R;
         e.preventDefault();
       }
-    };
-    stick.addEventListener('touchmove', move, {passive:false});
+    }, {passive:false});
     const end = (e)=>{
       for(const t of e.changedTouches){
-        if(t.identifier!==stickId) continue;
-        stickId = -1;
+        if(t.identifier!==sid) continue;
+        sid = -1;
         knob.style.transform = 'translate(-50%,-50%)';
-        touchInput.lx = 0; touchInput.ly = 0;
+        touchInput[axis+'x'] = 0; touchInput[axis+'y'] = 0;
       }
     };
     stick.addEventListener('touchend',    end, {passive:true});
     stick.addEventListener('touchcancel', end, {passive:true});
+    return ()=>sid;
   }
+  makeStick('tStick',  'l');     // 左摇杆 → 移动
+  makeStick('tStickR', 'r');     // 右摇杆 → 视角
 
-  // 右半屏拖动转视角（仅触屏模式 + 已开始游戏）
-  // 监听整个 document，但需排除虚拟控件、面板与摇杆区域
-  let lookId = -1, lx0=0, ly0=0;
-  const isControlEl = (el)=>{
-    if(!el) return false;
-    return !!(el.closest && el.closest('#touchLayer, #invPanel, #fusePanel, #gemUsePanel, #socketPanel, #overlay, #questPanel, #toggleBar, .slot'));
-  };
-  document.addEventListener('touchstart', (e)=>{
-    if(InputMode.current!=='touch') return;
-    if(!controls.isLocked) return;
-    for(const t of e.changedTouches){
-      if(t.identifier===stickId) continue;
-      if(isControlEl(document.elementFromPoint(t.clientX, t.clientY))) continue;
-      // 仅响应右半屏起点
-      if(t.clientX < innerWidth*0.45) continue;
-      lookId = t.identifier; lx0 = t.clientX; ly0 = t.clientY;
-      break;
-    }
-  }, {passive:true});
-  document.addEventListener('touchmove', (e)=>{
-    if(InputMode.current!=='touch') return;
-    if(!controls.isLocked) return;
-    for(const t of e.changedTouches){
-      if(t.identifier!==lookId) continue;
-      const dx = t.clientX - lx0, dy = t.clientY - ly0;
-      lx0 = t.clientX; ly0 = t.clientY;
-      // 旋转视角：与 PointerLockControls._onMouseMove 一致，但灵敏度调高
-      const eu = controls._euler;
-      eu.setFromQuaternion(camera.quaternion);
-      eu.y -= dx * 0.0035;
-      eu.x -= dy * 0.0035;
-      eu.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, eu.x));
-      camera.quaternion.setFromEuler(eu);
-    }
-  }, {passive:true});
-  document.addEventListener('touchend', (e)=>{
-    for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=-1; }
-  }, {passive:true});
-  document.addEventListener('touchcancel', (e)=>{
-    for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=-1; }
-  }, {passive:true});
-
-  // 按钮：用 pointerdown 立刻响应；阻止冒泡避免触发视角拖动
+  // 按钮：用 touchstart 立刻响应；阻止冒泡 + 阻止默认避免 ghost click
   const bind = (id, fn)=>{
     const el = document.getElementById(id);
     if(!el) return;
@@ -1370,7 +1343,6 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
     el.addEventListener('mousedown',  handler);
     el.addEventListener('click', (e)=>{ e.stopPropagation(); });
   };
-  bind('tCast', ()=>{ if(typeof manualCastActive==='function') manualCastActive(); });
   bind('tJump', ()=>{
     if(controls.isLocked && player.onGround && !player._dead){
       player.vel.y = 6; player.onGround = false;
@@ -1379,16 +1351,17 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
   bind('tHp',   ()=>{ if(typeof quickDrinkHp==='function') quickDrinkHp(); });
   bind('tMp',   ()=>{ if(typeof quickDrinkMp==='function') quickDrinkMp(); });
   bind('tInv',  ()=>{ if(typeof toggleInv==='function') toggleInv(true); });
+  bind('tQuest',()=>{
+    document.body.classList.toggle('show-quest');
+  });
   bind('tAuto', ()=>{
     if(typeof toggleAutoPlay==='function') toggleAutoPlay();
-    // 同步按钮高亮态
     const btn = document.getElementById('tAuto');
     if(btn) btn.classList.toggle('on', !!(settings && settings.autoPlay));
   });
   bind('tPause',()=>{
     if(player._dead) return;
     if(gamePaused){
-      // 已暂停：再点一次恢复
       startOrResumeGame();
     } else {
       gamePaused = true;
@@ -1398,8 +1371,7 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
     }
   });
 
-  // 技能槽：tap 切换为该技能并立即施放；长按 600ms 显示技能描述
-  // 由于 #skills 是动态 rebuild 的（refreshSkillBar），这里用事件委托
+  // 技能槽：tap 切换为该技能（不再立即施放，由自动施放接管）；长按显示技能描述
   const skillsEl = document.getElementById('skills');
   if(skillsEl){
     let pressTimer=null, longPressed=false, pressedSlotIdx=-1;
@@ -1417,19 +1389,16 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
       pressTimer = setTimeout(()=>{
         longPressed = true;
         const s = player.skills[idx];
-        if(s && typeof showSkillTip==='function'){
-          // 触屏长按：用居中描述（showActiveSkillDesc 显示当前技能；这里展示按到的）
+        if(s){
           const oldActive = player.activeSkill;
           player.activeSkill = idx;
           if(typeof showActiveSkillDesc==='function') showActiveSkillDesc();
-          player.activeSkill = oldActive;   // 长按只看不切
+          player.activeSkill = oldActive;
         }
       }, 600);
       e.stopPropagation();
     }, {passive:true});
-    const cancel = ()=>{
-      if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
-    };
+    const cancel = ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } };
     skillsEl.addEventListener('touchmove', cancel, {passive:true});
     skillsEl.addEventListener('touchend', (e)=>{
       cancel();
@@ -1437,7 +1406,7 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
       const idx = pressedSlotIdx; pressedSlotIdx=-1;
       if(idx<0 || longPressed) return;
       const s = player.skills[idx]; if(!s) return;
-      // 短按：切换为该技能 + 立即手动施放（一键到位）
+      // 短按：切换为该技能（自动施放接管释放时机）
       player.activeSkill = idx;
       if(typeof refreshSkillBar==='function') refreshSkillBar();
       if(typeof manualCastActive==='function') manualCastActive();
@@ -1452,15 +1421,15 @@ const touchInput = { lx:0, ly:0, jumpQueued:false, castQueued:false };
   dismissTipPanels.forEach(pid=>{
     const el = document.getElementById(pid);
     if(!el) return;
-    el.addEventListener('touchstart', (e)=>{
+    const tryHide = (ev)=>{
       if(InputMode.current!=='touch') return;
-      // 只有点到面板背景/空白处才隐藏 tip（点到 .invSlot/.gemUseEq 等会自己 stopPropagation 的不会进来）
+      // 点到背包格 / tip 操作按钮 / 操作 tip 本身 → 不要关闭 tip
+      const t = ev.target;
+      if(t && t.closest && (t.closest('.invSlot') || t.closest('.tip') || t.closest('.gemUseEq') || t.closest('.fuseRow') || t.closest('.hole2'))) return;
       if(typeof hideTip==='function') hideTip();
-    }, {passive:true});
-    el.addEventListener('click', (e)=>{
-      if(InputMode.current!=='touch') return;
-      if(typeof hideTip==='function') hideTip();
-    });
+    };
+    el.addEventListener('touchstart', tryHide, {passive:true});
+    el.addEventListener('click',      tryHide);
   });
 })();
 
@@ -1514,18 +1483,16 @@ if(_btnConfirmMode){
     if(_confirmFiring) return;
     _confirmFiring = true;
     _overlayHandler(e);
-    // 防点击穿透：触屏点击后 350ms 内忽略下层 mouse/click（避免 touchend 触发的 ghost click 打到下方按钮）
-    const blocker = (ev)=>{ ev.preventDefault(); ev.stopPropagation(); };
-    document.addEventListener('click',     blocker, true);
-    document.addEventListener('mousedown', blocker, true);
+    // 防点击穿透：开始/继续后 350ms 内禁掉触屏功能键 + 主画布点击
+    // 仅拦截 #touchLayer / canvas，不影响其他 UI（如存读档按钮）
+    const blockNodes = [document.getElementById('touchLayer'), renderer && renderer.domElement].filter(Boolean);
+    blockNodes.forEach(n=>{ n.style.pointerEvents='none'; });
     setTimeout(()=>{
-      document.removeEventListener('click',     blocker, true);
-      document.removeEventListener('mousedown', blocker, true);
+      blockNodes.forEach(n=>{ n.style.pointerEvents=''; });
       _confirmFiring = false;
     }, 350);
   };
   _btnConfirmMode.addEventListener('click',     startFn);
-  // touchstart 用非 passive 才能 preventDefault 阻止后续 ghost click
   _btnConfirmMode.addEventListener('touchstart',startFn, {passive:false});
 }
 // 键盘兜底：开始/暂停菜单上按 Space/Enter 视为"确定开始"
@@ -2868,7 +2835,7 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   if(isElite){tintEnemyBody(mesh,0x6a3aff,.6);}
   if(isBoss){mesh.scale.setScalar(1.8);tintEnemyBody(mesh,0xff2020,.8);}
   const hpBar=new THREE.Sprite(new THREE.SpriteMaterial({map:makeHpBarTex(1,isBoss?'#ff3030':isElite?'#c08aff':'#ff7070'),depthTest:false,transparent:true}));
-  hpBar.scale.set(isBoss?3:2,isBoss?0.06:.18,1);hpBar.position.y=isBoss?5:2.7;mesh.add(hpBar);e.hpBar=hpBar;
+  hpBar.scale.set(isBoss?3:2,isBoss?0.04:.18,1);hpBar.position.y=isBoss?5:2.7;mesh.add(hpBar);e.hpBar=hpBar;
   // BOSS 始终显示血条；普通敌人/精英默认隐藏，受伤后才显示
   e.hpBarVisibleTimer = 0;       // >0 时显示；每帧递减到 0 后隐藏
   if(!isBoss){
@@ -3116,7 +3083,7 @@ function saveGame(silent){
         hp:player.hp, hpMax:player.hpMax, mp:player.mp, mpMax:player.mpMax,
         level:player.level, exp:player.exp, expNeed:player.expNeed,
         str:player.str, dex:player.dex, int:player.int,
-        killCount:player.killCount, activeSkill:player.activeSkill,
+        killCount:player.killCount, deathCount:player.deathCount||0, activeSkill:player.activeSkill,
         equip:player.equip, inv:player.inv
       },
       waveLevel, difficulty,
@@ -3153,7 +3120,7 @@ function loadGame(){
   // 恢复玩家核心数据
   player.level=P.level; player.exp=P.exp; player.expNeed=P.expNeed;
   player.str=P.str; player.dex=P.dex; player.int=P.int;
-  player.killCount=P.killCount||0; player.activeSkill=P.activeSkill||0;
+  player.killCount=P.killCount||0; player.deathCount=P.deathCount||0; player.activeSkill=P.activeSkill||0;
   player.equip={weapon:null,helm:null,armor:null,ring:null};
   ['weapon','helm','armor','ring'].forEach(s=>{ player.equip[s]=_relinkItem(P.equip && P.equip[s]); });
   player.inv=(P.inv||[]).map(_relinkItem);
@@ -3651,6 +3618,7 @@ function damagePlayer(v, source){
 function gameOver(){
   if(player._dead) return;        // 防重复触发
   player._dead = true;
+  player.deathCount = (player.deathCount||0) + 1;
   Audio.death();
   gamePaused = true;              // 死亡即暂停，敌方投射物 / AI 全部冻结
   controls.unlock();
@@ -3661,7 +3629,9 @@ function gameOver(){
   showDeathOverlay();
 
   // 用 onclick 替代 addEventListener，避免事件残留
-  overlay.onclick = ()=>{
+  overlay.onclick = (ev)=>{
+    // 点击到按钮（保存/读档/确定/任何 button）时，不触发复活
+    if(ev && ev.target && (ev.target.closest && ev.target.closest('button'))) return;
     overlay.onclick = null;
     respawn();
   };
@@ -4211,12 +4181,62 @@ function showTip(it,x,y){
 }
 function hideTip(){tipEl.style.display='none';tipCmpEl.style.display='none';}
 
+// 触屏模式：显示装备/物品 tip 时附带操作按钮（装备/替换/使用/丢弃）
+// 调用时 idx 为该物品在 player.inv 的下标
+function showItemTipWithActions(it, idx, x, y){
+  showTip(it, x, y);
+  // 复用 tipEl，把按钮注入到末尾
+  if(tipEl.style.display==='none') return;
+  // 已经追加过的按钮区先移除
+  let actEl = tipEl.querySelector('#tipActions');
+  if(actEl) actEl.remove();
+  actEl = document.createElement('div');
+  actEl.id = 'tipActions';
+  // 根据物品类型决定按钮
+  const buttons = [];
+  if(it.isGem){
+    buttons.push({lbl:'镶嵌', fn:()=>{ hideTip(); useGemFromInv(idx); }});
+  } else if(it.special==='hpPotion'){
+    buttons.push({lbl:'喝下', fn:()=>{ useHpPotion(idx); hideTip(); }});
+  } else if(it.special==='mpPotion'){
+    buttons.push({lbl:'喝下', fn:()=>{ useMpPotion(idx); hideTip(); }});
+  } else if(it.special==='expTome'){
+    buttons.push({lbl:'研读', fn:()=>{ useExpTome(idx); hideTip(); }});
+  } else if(it.special==='bagExpand'){
+    buttons.push({lbl:'使用', fn:()=>{ useBagExpandScroll(idx); hideTip(); }});
+  } else if(it.slot && it.quality){
+    const cur = player.equip[it.slot];
+    buttons.push({lbl: cur ? '替换装备' : '装备', fn:()=>{
+      const c = player.equip[it.slot];
+      player.equip[it.slot] = it;
+      player.inv.splice(idx,1);
+      if(c) player.inv.splice(idx,0,c);
+      applyEquipStats(); rebuildInv();
+      if(typeof Quests!=='undefined'){ Quests.onEvent('equip', {qualityKey: it.quality.key}); }
+      hideTip();
+    }});
+  }
+  buttons.push({lbl:'丢弃', cls:'danger', fn:()=>{ dropFromInv(idx); hideTip(); }});
+  buttons.push({lbl:'关闭', fn:()=>{ hideTip(); }});
+  buttons.forEach(b=>{
+    const btn=document.createElement('button');
+    btn.textContent=b.lbl; if(b.cls) btn.className=b.cls;
+    const stop=(e)=>{ e.stopPropagation(); e.preventDefault && e.preventDefault(); b.fn(); };
+    btn.addEventListener('click', stop);
+    btn.addEventListener('touchstart', stop, {passive:false});
+    actEl.appendChild(btn);
+  });
+  tipEl.appendChild(actEl);
+}
+
 const invPanel=document.getElementById('invPanel');
 // 记忆上一次手柄查看的格子位置；下次打开背包时尝试恢复到这一格
 let _lastPadCursor = 0;
 function toggleInv(byPad){
   if(invPanel.style.display==='block'){
     // ---- 关闭背包 ----
+    // 关闭即清除所有物品的 NEW 标记（关闭=已查看）
+    if(player && player.inv){ player.inv.forEach(it=>{ if(it && it.isNew) it.isNew=false; }); }
     // 保存当前手柄光标位置，下次打开时恢复
     if(padCursor>=0) _lastPadCursor = padCursor;
     Audio.uiClose();
@@ -4275,8 +4295,7 @@ function updatePadCursor(){
   const it = player.inv[padCursor];
   if(it){
     const r=slot.getBoundingClientRect();
-    // 清掉 NEW 标记（光标"看到"等同于查看）
-    if(it.isNew){ it.isNew=false; const tag=slot.querySelector('.newTag'); if(tag) tag.remove(); }
+    if(it.isNew){ it.isNew=false; const tag=slot.querySelector('.newDot'); if(tag) tag.remove(); }
     showTip(it, r.right, r.top);
   } else {
     hideTip();
@@ -4733,6 +4752,7 @@ function executeFuseWithAnim(grp){
     player.inv.push(newIt);
     // 📖 合成副产物：有几率额外掉落一本「经验之书」（使用后加经验）
     //   产出概率 55%；经验量随玩家当前升级所需经验缩放（约 25%~45%），后期同样有用。
+    let _bonusTome = null;
     if(Math.random() < 0.55){
       const need = player.expNeed || 50;
       const exp = Math.floor(need * (0.25 + Math.random()*0.20));
@@ -4743,6 +4763,7 @@ function executeFuseWithAnim(grp){
       } else {
         spawnLootFromItem(tome, controls.getObject().position.clone(), true);
       }
+      _bonusTome = tome;
       setTimeout(()=>toast(`📖 合成副产物：经验之书（+${exp} 经验）`), 1400);
     }
     // ✨ 处理装备合成自动拆下的宝石：能放进背包就放，放不下的丢到玩家脚下
@@ -4786,6 +4807,22 @@ function executeFuseWithAnim(grp){
     requestAnimationFrame(()=>requestAnimationFrame(()=>resEl.classList.add('show')));
 
     Audio.pickup && Audio.pickup(newIt.quality.key || 'rare');
+
+    // 副产物：经验之书也展示在结果右侧
+    if(_bonusTome){
+      const bonusEl = document.createElement('div');
+      bonusEl.className = 'fxResult';
+      bonusEl.style.color = _bonusTome.quality.color;
+      bonusEl.style.borderColor = _bonusTome.quality.color;
+      bonusEl.style.boxShadow = `0 0 22px ${_bonusTome.quality.color}`;
+      bonusEl.style.width = '64px'; bonusEl.style.height = '64px'; bonusEl.style.fontSize = '36px';
+      bonusEl.style.left = (cx+90)+'px'; bonusEl.style.top = cy+'px';
+      bonusEl.textContent = _bonusTome.icon;
+      fuseFxEl.appendChild(bonusEl);
+      setTimeout(()=>{
+        requestAnimationFrame(()=>requestAnimationFrame(()=>bonusEl.classList.add('show')));
+      }, 200);
+    }
     toast(`⚗ 合成成功：${newIt.name}`);
 
     // 1.0s 后清场
@@ -5430,7 +5467,7 @@ function rebuildInv(){
     const it=player.inv[i];
     const d=document.createElement('div');d.className='invSlot';
     if(it){
-      const newTag = it.isNew ? `<span class="newTag">NEW</span>` : '';
+      const newTag = it.isNew ? `<span class="newDot"></span>` : '';
       // 升级提示：是装备 且 评分高于当前已穿戴 → 显示 ↑ 角标
       let upTag = '';
       if(!it.isGem && !it.special && it.slot && it.quality){
@@ -5451,10 +5488,17 @@ function rebuildInv(){
       d.addEventListener('mousemove',e=>{if(gemModalOpen())return;_hoverIdx=i;showTip(it,e.clientX,e.clientY);});
       d.addEventListener('mouseleave',()=>{if(_hoverIdx===i){_hoverIdx=-1;hideTip();}});
       // 左键：装备/交换（宝石不能装备，只能镶嵌）
-      d.addEventListener('click',()=>{
+      d.addEventListener('click',(ev)=>{
         // 镶嵌/孔位面板打开时，禁止操作背包，必须先关闭镶嵌界面
         if(gemModalOpen()){ toast('请先关闭镶嵌界面'); return; }
         it.isNew=false;
+        // 触屏模式：点击 = 显示 tip + 操作按钮（装备/替换/使用/丢弃）
+        if(InputMode && InputMode.current==='touch'){
+          ev.stopPropagation();
+          const r = d.getBoundingClientRect();
+          showItemTipWithActions(it, i, r.left + r.width/2, r.top);
+          return;
+        }
         if(it.isGem){
           // 宝石点击 → 弹"选孔位"快速选择浮窗（v0.22 新交互）
           useGemFromInv(i);
@@ -5786,6 +5830,16 @@ function update(dt){
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
+  // 触屏右摇杆驱动视角
+  if(InputMode.current==='touch' && controls.isLocked && (touchInput.rx || touchInput.ry)){
+    const e = controls._euler;
+    e.setFromQuaternion(camera.quaternion);
+    e.y -= touchInput.rx * 2.6 * dt;
+    e.x -= touchInput.ry * 2.0 * dt;
+    e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
+    camera.quaternion.setFromEuler(e);
+  }
+
 
   // 移动（键盘 + 手柄）
   if(controls.isLocked){

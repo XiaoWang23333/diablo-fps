@@ -170,8 +170,17 @@
     background:#15110b;border:2px solid #6b5a2b;border-radius:6px;color:#ddd;z-index:35;display:none;
     box-shadow:0 0 30px rgba(0,0,0,.9);flex-direction:column}
   #fusePanel h3{padding:8px 12px;background:#241c10;color:var(--gold);border-bottom:1px solid #6b5a2b;letter-spacing:2px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
-  #fusePanel h3 .closeBtn{cursor:pointer;color:#999;font-size:14px;padding:0 6px}
-  #fusePanel h3 .closeBtn:hover{color:#fff}
+  #fusePanel h3 .closeBtn,
+  #gemUsePanel h3 .closeBtn,
+  #socketPanel h3 .closeBtn,
+  #invPanel h3 .closeBtn{
+    cursor:pointer;color:#ccc;font-size:13px;font-weight:normal;letter-spacing:0;
+    padding:4px 10px;border:1px solid #6b5a2b;border-radius:4px;background:#241c10
+  }
+  #fusePanel h3 .closeBtn:hover,
+  #gemUsePanel h3 .closeBtn:hover,
+  #socketPanel h3 .closeBtn:hover,
+  #invPanel h3 .closeBtn:hover{color:#fff;background:#3a2a14;border-color:var(--gold)}
   #fuseList{padding:8px;overflow-y:auto;max-height:55vh}
   .fuseItem{display:flex;align-items:center;gap:10px;padding:8px;background:#0a0a0a;border:1px solid #333;border-radius:4px;margin-bottom:6px;cursor:pointer;transition:all .15s}
   .fuseItem:hover,.fuseItem.padSel{border-color:var(--gold);background:#1a1408;box-shadow:0 0 8px rgba(232,196,90,.3)}
@@ -190,8 +199,6 @@
     box-shadow:0 0 30px rgba(0,0,0,.95);flex-direction:column}
   #gemUsePanel h3{padding:8px 12px;background:#241c10;color:var(--gold);border-bottom:1px solid #6b5a2b;
     letter-spacing:2px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
-  #gemUsePanel h3 .closeBtn{cursor:pointer;color:#999;font-size:13px}
-  #gemUsePanel h3 .closeBtn:hover{color:#fff}
   #gemUseSel{padding:8px 12px;background:#0f0c08;border-bottom:1px solid #444;font-size:13px;display:flex;align-items:center;gap:10px}
   #gemUseSel .gIco2{width:32px;height:32px;border:2px solid;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;background:#000}
   #gemUseList{padding:8px;overflow-y:auto;max-height:55vh;display:flex;flex-direction:column;gap:6px}
@@ -212,8 +219,7 @@
     box-shadow:0 0 30px rgba(0,0,0,.9);flex-direction:column}
   #socketPanel h3{padding:8px 12px;background:#241c10;color:var(--gold);border-bottom:1px solid #6b5a2b;
     letter-spacing:2px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
-  #socketPanel h3 .closeBtn{cursor:pointer;color:#999;font-size:13px}
-  #socketPanel h3 .closeBtn:hover{color:#fff}
+  #socketPanel h3 .closeBtn:hover{}  /* 已由全局 .closeBtn 样式接管 */
   #socketBody{display:flex;gap:8px;padding:10px;max-height:60vh;overflow-y:auto}
   #socketBody .col{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
   #socketBody .col h4{font-size:12px;color:var(--gold);letter-spacing:2px;padding:2px 4px;border-bottom:1px solid #444}
@@ -302,59 +308,70 @@
   /* ========== 触屏控件（默认隐藏，body.mode-touch 时显示） ========== */
   #touchLayer{display:none;position:fixed;inset:0;z-index:7;pointer-events:none}
   body.mode-touch #touchLayer{display:block}
-  /* 虚拟摇杆：左下，固定圆形底盘 */
-  #tStick{position:absolute;left:calc(22px + var(--safe-l));bottom:calc(70px + var(--safe-b));
-          width:130px;height:130px;border:2px solid rgba(232,196,90,.4);border-radius:50%;
-          background:rgba(0,0,0,.35);pointer-events:auto;touch-action:none}
-  #tStick .knob{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;
+  /* === 双摇杆：左下移动、右下视角（替代原来的攻击大圆） === */
+  #tStick,#tStickR{position:absolute;width:120px;height:120px;border:2px solid rgba(232,196,90,.4);border-radius:50%;
+                   background:rgba(0,0,0,.32);pointer-events:auto;touch-action:none}
+  #tStick {left:calc(20px + var(--safe-l));bottom:calc(120px + var(--safe-b))}
+  #tStickR{right:calc(20px + var(--safe-r));bottom:calc(120px + var(--safe-b));border-color:rgba(90,166,255,.45)}
+  #tStick .knob,#tStickR .knob{position:absolute;left:50%;top:50%;width:50px;height:50px;border-radius:50%;
                 background:rgba(232,196,90,.6);transform:translate(-50%,-50%);box-shadow:0 0 12px rgba(0,0,0,.7)}
-  /* 主攻击键：右下大圆 */
-  #tCast{position:absolute;right:calc(22px + var(--safe-r));bottom:calc(80px + var(--safe-b));
-         width:108px;height:108px;border-radius:50%;border:3px solid var(--gold);
-         background:radial-gradient(circle,rgba(232,80,80,.55) 0%,rgba(80,20,20,.7) 80%);
-         color:#fff;font-size:16px;font-weight:bold;letter-spacing:2px;
-         display:flex;align-items:center;justify-content:center;pointer-events:auto;
-         box-shadow:0 0 16px rgba(255,80,80,.6) inset,0 0 12px rgba(232,196,90,.5)}
-  #tCast:active{transform:scale(.95)}
-  #tCast .cd{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;color:#ffd97a}
-  /* 中部小按钮（跳/喝药/背包/暂停/托管），统一更小 + 居中横排 */
-  .tBtn{position:absolute;width:46px;height:46px;border-radius:50%;border:2px solid #6b5a2b;
-        background:rgba(20,16,11,.85);color:#ddd;font-size:16px;display:flex;align-items:center;justify-content:center;
-        pointer-events:auto;box-shadow:0 0 8px rgba(0,0,0,.7)}
+  #tStickR .knob{background:rgba(90,166,255,.6)}
+  /* 通用按钮 */
+  .tBtn{position:absolute;width:44px;height:44px;border-radius:50%;border:2px solid #6b5a2b;
+        background:rgba(20,16,11,.85);color:#ddd;font-size:15px;display:flex;align-items:center;justify-content:center;
+        pointer-events:auto;box-shadow:0 0 8px rgba(0,0,0,.7);white-space:nowrap}
   .tBtn:active{transform:scale(.92);border-color:var(--gold)}
   .tBtn .lbl{position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);font-size:9px;color:#aaa;white-space:nowrap}
-  /* 中下功能键横排：跳/背包/托管/暂停（在技能条下方、摇杆与攻击键上方的"中区"） */
-  /* 用 transform:translateX(-50%) 保证居中，bottom 高度避开摇杆/攻击键顶部 */
-  #tFnRow{position:absolute;left:50%;bottom:calc(168px + var(--safe-b));transform:translateX(-50%);
-          display:flex;gap:14px;pointer-events:none}
-  #tFnRow .tBtn{position:relative;left:0;right:0;bottom:0}
-  /* 血/蓝瓶：分别贴在摇杆和攻击键的内侧上方，离主控件远一点避免误触 */
-  #tHp{left:calc(160px + var(--safe-l));bottom:calc(110px + var(--safe-b))}
-  #tMp{right:calc(140px + var(--safe-r));bottom:calc(110px + var(--safe-b))}
-  /* 蓝/红药水按钮配色 */
-  #tHp{border-color:#ff5070;color:#ff8080}
-  #tMp{border-color:#5aa6ff;color:#a0c8ff}
-  /* 托管按钮激活态高亮 */
+  /* 血/蓝瓶：贴在 HP/MP 球内侧 */
+  #tHp{left:calc(150px + var(--safe-l));bottom:calc(150px + var(--safe-b));border-color:#ff5070;color:#ff8080}
+  #tMp{right:calc(150px + var(--safe-r));bottom:calc(150px + var(--safe-b));border-color:#5aa6ff;color:#a0c8ff}
+  /* 底部功能键行：暂停/背包/任务/托管/跳，最下方 */
+  #tFnRow{position:absolute;left:50%;bottom:calc(8px + var(--safe-b));transform:translateX(-50%);
+          display:flex;gap:10px;pointer-events:none;z-index:9}
+  #tFnRow .tBtn{position:relative;left:0;right:0;bottom:0;width:42px;height:42px;font-size:14px}
   #tAuto.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
   /* 触屏模式：HUD 紧凑、隐藏侧栏式信息 */
   body.mode-touch #info{display:none}
   body.mode-touch #toggleBar{display:none}
-  body.mode-touch #progressPanel{top:calc(8px + var(--safe-t));right:calc(8px + var(--safe-r));
-                                 width:140px;font-size:11px}
-  body.mode-touch #minimap{width:96px;height:96px;border-radius:50%;
-                           top:calc(8px + var(--safe-t));right:calc(8px + var(--safe-r))}
-  body.mode-touch #mmCanvas{width:96px;height:96px}
-  body.mode-touch #questPanel{display:none}   /* 触屏默认折叠任务（点击图标再展开，留作后续） */
   body.mode-touch #padRow{display:none}
-  body.mode-touch #hud{padding:0;background:none}
-  body.mode-touch #skillbar{position:fixed;bottom:calc(220px + var(--safe-b));left:0;right:0;
-                            display:flex;justify-content:center;pointer-events:none;z-index:8}
+  /* 关卡进度面板：左上 */
+  body.mode-touch #progressPanel{top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));right:auto;
+                                 width:150px;font-size:11px}
+  /* 小地图：右上、缩小为圆形 */
+  body.mode-touch #minimap{width:88px;height:88px;border-radius:50%;
+                           top:calc(8px + var(--safe-t));right:calc(8px + var(--safe-r))}
+  body.mode-touch #mmCanvas{width:88px;height:88px}
+  /* 任务面板：默认隐藏，点 #tQuest 才显示 */
+  body.mode-touch #questPanel{display:none;top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));
+                              width:min(80vw,320px);max-height:60vh;z-index:25}
+  body.mode-touch.show-quest #questPanel{display:block}
+  /* HP/MP 血球：分置左下/右下，缩小 */
+  body.mode-touch #hud{padding:0;background:none;display:block;pointer-events:none}
+  body.mode-touch .orb{position:fixed;width:88px;height:88px;border-width:2px;z-index:6}
+  body.mode-touch .orb.hp{left:calc(20px + var(--safe-l));bottom:calc(252px + var(--safe-b))}
+  body.mode-touch .orb.mp{right:calc(20px + var(--safe-r));bottom:calc(252px + var(--safe-b))}
+  body.mode-touch .orb .lbl{font-size:12px}
+  /* 经验条：放最下方（在功能键上方） */
+  body.mode-touch #skillbar{position:fixed;bottom:calc(60px + var(--safe-b));left:0;right:0;padding:0;
+                            display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:8}
+  body.mode-touch #expbar{position:fixed;left:8px;right:8px;bottom:calc(56px + var(--safe-b));max-width:none;
+                          width:auto;height:6px;z-index:6}
+  body.mode-touch #skillbar #expbar{display:none}   /* skillbar 内的 expbar 隐藏，仅显示固定的 */
   body.mode-touch #skills{gap:6px;max-width:96vw;justify-content:center;flex-wrap:nowrap}
-  body.mode-touch .slot{width:50px;height:50px;font-size:9px;pointer-events:auto}
+  body.mode-touch .slot{width:46px;height:46px;font-size:9px;pointer-events:auto;white-space:nowrap}
   body.mode-touch .slot .ico{font-size:18px}
   body.mode-touch #crosshair{width:14px;height:14px}
+  /* 战斗 UI 文字：禁止换行 */
+  body.mode-touch #info,body.mode-touch #info *{white-space:nowrap}
+  body.mode-touch #progressPanel,body.mode-touch #progressPanel *{white-space:nowrap}
+  /* 拾取道具文字：右中 */
+  body.mode-touch #loot{position:fixed;right:calc(8px + var(--safe-r));top:50%;left:auto;bottom:auto;
+                        transform:translateY(-50%);max-width:46vw;font-size:11px;align-items:flex-end}
+  body.mode-touch #loot .loot-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+  /* 战斗 toast 也不换行 */
+  body.mode-touch #toast .toast-item{white-space:nowrap}
   /* 触屏面板全屏化 */
   body.mode-touch #invPanel,
   body.mode-touch #fusePanel,
@@ -370,6 +387,25 @@
   /* 手柄模式：隐藏鼠标光标 */
   body.mode-pad{cursor:none}
   body.mode-pad #crosshair{filter:drop-shadow(0 0 3px #fff)}
+
+  /* 各界面的 hint 文案：触屏模式下隐藏（手柄/键鼠相关） */
+  body.mode-touch #invHint,
+  body.mode-touch #fuseHintBar,
+  body.mode-touch #gemUseHint,
+  body.mode-touch #socketHint{display:none}
+
+  /* ========== 通用：装备 tip 操作按钮 ========== */
+  #tipActions{display:flex;gap:6px;margin-top:8px;justify-content:center;pointer-events:auto}
+  #tipActions button{padding:6px 14px;font-size:12px;border:1px solid var(--gold);background:#241c10;color:var(--gold);
+                     border-radius:4px;cursor:pointer;letter-spacing:2px}
+  #tipActions button:hover{background:#3a2a14}
+  #tipActions button.danger{border-color:#ff7070;color:#ff8a8a}
+  #tipActions button.danger:hover{background:#3a1414}
+  /* 触屏模式 tip 允许接收点击（按钮要可点）；其他模式保持鼠标穿透 */
+  body.mode-touch .tip{pointer-events:auto}
+  /* 背包小红点：替代 NEW 标签 */
+  .invSlot .newDot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;
+                   background:#ff5050;box-shadow:0 0 4px #ff5050}
 </style>
 </head>
 <body>
@@ -463,7 +499,7 @@
 <div class="tip" id="tip"></div>
 <div class="tip" id="tipCmp"></div>
 <div id="fusePanel">
-  <h3><span>⚗ 选择要合成的组合</span><span class="closeBtn" id="fuseCloseBtn">关闭 (B/Esc)</span></h3>
+  <h3><span>⚗ 选择要合成的组合</span><span class="closeBtn" id="fuseCloseBtn">✕ 关闭</span></h3>
   <div id="fuseList"></div>
   <div id="fuseHintBar">🖱 点击组合即可合成 · 🎮 摇杆/D-Pad 选择 · A 合成 · B/Y 关闭</div>
 </div>
@@ -471,7 +507,7 @@
 
 <!-- 宝石使用浮窗（v0.22 简化交互） -->
 <div id="gemUsePanel">
-  <h3><span>💎 选择装备孔位</span><span class="closeBtn" id="gemUseCloseBtn">关闭 (Esc/B)</span></h3>
+  <h3><span>💎 选择装备孔位</span><span class="closeBtn" id="gemUseCloseBtn">✕ 关闭</span></h3>
   <div id="gemUseSel"></div>
   <div id="gemUseList"></div>
   <div id="gemUseHint">🖱 点空孔位完成镶嵌　🎮 ↑↓ 跨装备 · ←→ 同装备孔位 · A 确认 · B/Y 关闭</div>
@@ -479,7 +515,7 @@
 
 <!-- 宝石镶嵌面板 -->
 <div id="socketPanel">
-  <h3><span>💎 宝石镶嵌</span><span class="closeBtn" id="socketCloseBtn">关闭 (Esc)</span></h3>
+  <h3><span>💎 宝石镶嵌</span><span class="closeBtn" id="socketCloseBtn">✕ 关闭</span></h3>
   <div id="socketBody">
     <div class="col">
       <h4>背包宝石</h4>
@@ -496,16 +532,17 @@
 <!-- ========== 触屏控件层（仅 body.mode-touch 时显示） ========== -->
 <div id="touchLayer">
   <div id="tStick"><div class="knob"></div></div>
-  <button id="tCast" class="tCastBtn">攻击<div class="cd" id="tCastCd"></div></button>
-  <!-- 血/蓝瓶：贴在主控件内侧 -->
+  <div id="tStickR"><div class="knob"></div></div>
+  <!-- 血/蓝瓶 -->
   <button id="tHp"    class="tBtn">🧪<span class="lbl">血</span></button>
   <button id="tMp"    class="tBtn">🧴<span class="lbl">蓝</span></button>
-  <!-- 中下功能键行：跳 / 背包 / 托管 / 暂停 -->
+  <!-- 底部功能键行（最下方）：暂停 / 背包 / 任务 / 托管 / 跳 -->
   <div id="tFnRow">
-    <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
-    <button id="tInv"   class="tBtn">🎒<span class="lbl">背包</span></button>
-    <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
     <button id="tPause" class="tBtn">⏸<span class="lbl">暂停</span></button>
+    <button id="tInv"   class="tBtn">🎒<span class="lbl">背包</span></button>
+    <button id="tQuest" class="tBtn">📜<span class="lbl">任务</span></button>
+    <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
+    <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
   </div>
 </div>
 
