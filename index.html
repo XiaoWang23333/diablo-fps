@@ -26,8 +26,10 @@
   .orb.mp .fill{background:radial-gradient(circle at 50% 30%,#6ab2ff,#1a4a9e 70%,#0a1f4a)}
   .orb .lbl{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:bold;text-shadow:0 0 4px #000;font-size:14px;letter-spacing:1px}
   #skillbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
-  #expbar{width:100%;max-width:680px;height:10px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden}
-  #expbar>div{height:100%;width:0;background:linear-gradient(90deg,#e8c45a,#fff5b8);box-shadow:0 0 6px #e8c45a inset}
+  #expbar{width:100%;max-width:680px;height:10px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden;transition:box-shadow .2s}
+  #expbar>div{height:100%;width:0;background:linear-gradient(90deg,#e8c45a,#fff5b8);box-shadow:0 0 6px #e8c45a inset;transition:width .6s cubic-bezier(.3,1.5,.6,1)}
+  #expbar.expFlash{box-shadow:0 0 14px var(--gold),0 0 28px rgba(232,196,90,.6);border-color:var(--gold)}
+  #expbar.expFlash>div{filter:brightness(1.6)}
   #skills{display:flex;gap:10px;flex-wrap:wrap;max-width:80vw}
   .slot{width:62px;height:62px;border:2px solid #2a2a2a;border-radius:6px;background:#111;display:flex;align-items:center;justify-content:center;font-size:11px;color:#bbb;text-align:center;position:relative;box-shadow:0 0 8px rgba(0,0,0,.6) inset;padding:4px;pointer-events:auto}
   .slot.active{border-color:var(--gold);box-shadow:0 0 10px var(--gold)}
@@ -325,10 +327,22 @@
   /* 血/蓝瓶：贴在 HP/MP 球内侧 */
   #tHp{left:calc(150px + var(--safe-l));bottom:calc(150px + var(--safe-b));border-color:#ff5070;color:#ff8080}
   #tMp{right:calc(150px + var(--safe-r));bottom:calc(150px + var(--safe-b));border-color:#5aa6ff;color:#a0c8ff}
+  /* 药水瓶数小角标：右上角 */
+  .tBtn .cnt{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;
+             background:#241c10;border:1px solid var(--gold);border-radius:9px;color:var(--gold);
+             font-size:11px;font-weight:bold;line-height:16px;text-align:center;white-space:nowrap}
+  #tHp .cnt{border-color:#ff5070;color:#ff8080}
+  #tMp .cnt{border-color:#5aa6ff;color:#a0c8ff}
+  .tBtn .cnt.zero{opacity:0.4}
   /* 底部功能键行：暂停/背包/任务/托管/跳，最下方 */
   #tFnRow{position:absolute;left:50%;bottom:calc(8px + var(--safe-b));transform:translateX(-50%);
-          display:flex;gap:10px;pointer-events:none;z-index:9}
+          display:flex;gap:10px;pointer-events:none;z-index:9;align-items:center}
   #tFnRow .tBtn{position:relative;left:0;right:0;bottom:0;width:42px;height:42px;font-size:14px}
+  /* 背包按钮放大且更醒目（金边脉冲） */
+  #tFnRow .tInvBig{width:58px;height:58px;font-size:22px;border-color:var(--gold);
+                   background:radial-gradient(circle,#3a2a14 0%,#15110b 80%);
+                   box-shadow:0 0 14px rgba(232,196,90,.55), 0 0 4px var(--gold) inset}
+  #tFnRow .tInvBig .lbl{font-size:10px;color:var(--gold);bottom:-15px}
   #tAuto.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
@@ -338,7 +352,10 @@
   body.mode-touch #padRow{display:none}
   /* 关卡进度面板：左上 */
   body.mode-touch #progressPanel{top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));right:auto;
-                                 width:150px;font-size:11px}
+                                 width:180px;font-size:10px;padding:6px 8px}
+  body.mode-touch #progressPanel .pTitle{font-size:10px;letter-spacing:1px;gap:6px;flex-wrap:wrap}
+  body.mode-touch #progressPanel .pInfo{font-size:9px}
+  body.mode-touch #progressPanel .pMark{width:12px;height:12px;font-size:9px}
   /* 小地图：右上、缩小为圆形 */
   body.mode-touch #minimap{width:88px;height:88px;border-radius:50%;
                            top:calc(8px + var(--safe-t));right:calc(8px + var(--safe-r))}
@@ -355,17 +372,17 @@
   body.mode-touch .orb .lbl{font-size:12px}
   /* 经验条：放最下方（在功能键上方） */
   body.mode-touch #skillbar{position:fixed;bottom:calc(60px + var(--safe-b));left:0;right:0;padding:0;
-                            display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;z-index:8}
-  body.mode-touch #expbar{position:fixed;left:8px;right:8px;bottom:calc(56px + var(--safe-b));max-width:none;
-                          width:auto;height:6px;z-index:6}
-  body.mode-touch #skillbar #expbar{display:none}   /* skillbar 内的 expbar 隐藏，仅显示固定的 */
+                            display:flex;flex-direction:column-reverse;align-items:center;gap:6px;pointer-events:none;z-index:8}
+  /* 经验条横贯屏幕，紧贴功能键上方 */
+  body.mode-touch #skillbar #expbar{width:96vw;max-width:96vw;height:8px;margin-bottom:0}
   body.mode-touch #skills{gap:6px;max-width:96vw;justify-content:center;flex-wrap:nowrap}
   body.mode-touch .slot{width:46px;height:46px;font-size:9px;pointer-events:auto;white-space:nowrap}
   body.mode-touch .slot .ico{font-size:18px}
   body.mode-touch #crosshair{width:14px;height:14px}
   /* 战斗 UI 文字：禁止换行 */
   body.mode-touch #info,body.mode-touch #info *{white-space:nowrap}
-  body.mode-touch #progressPanel,body.mode-touch #progressPanel *{white-space:nowrap}
+  body.mode-touch #progressPanel{white-space:normal}
+  body.mode-touch #progressPanel *{white-space:normal}
   /* 拾取道具文字：右中 */
   body.mode-touch #loot{position:fixed;right:calc(8px + var(--safe-r));top:50%;left:auto;bottom:auto;
                         transform:translateY(-50%);max-width:46vw;font-size:11px;align-items:flex-end}
@@ -395,7 +412,8 @@
   body.mode-touch #socketHint{display:none}
 
   /* ========== 通用：装备 tip 操作按钮 ========== */
-  #tipActions{display:flex;gap:6px;margin-top:8px;justify-content:center;pointer-events:auto}
+  #tipActions{display:flex;gap:6px;margin-top:8px;justify-content:center;pointer-events:auto;flex-wrap:wrap;
+              position:sticky;bottom:0;background:#080808;padding-top:6px}
   #tipActions button{padding:6px 14px;font-size:12px;border:1px solid var(--gold);background:#241c10;color:var(--gold);
                      border-radius:4px;cursor:pointer;letter-spacing:2px}
   #tipActions button:hover{background:#3a2a14}
@@ -534,13 +552,13 @@
   <div id="tStick"><div class="knob"></div></div>
   <div id="tStickR"><div class="knob"></div></div>
   <!-- 血/蓝瓶 -->
-  <button id="tHp"    class="tBtn">🧪<span class="lbl">血</span></button>
-  <button id="tMp"    class="tBtn">🧴<span class="lbl">蓝</span></button>
-  <!-- 底部功能键行（最下方）：暂停 / 背包 / 任务 / 托管 / 跳 -->
+  <button id="tHp"    class="tBtn">🧪<span class="lbl">血</span><span class="cnt" id="tHpCnt">0</span></button>
+  <button id="tMp"    class="tBtn">🧴<span class="lbl">蓝</span><span class="cnt" id="tMpCnt">0</span></button>
+  <!-- 底部功能键行（最下方）：暂停 / 任务 / 背包(大) / 托管 / 跳 -->
   <div id="tFnRow">
     <button id="tPause" class="tBtn">⏸<span class="lbl">暂停</span></button>
-    <button id="tInv"   class="tBtn">🎒<span class="lbl">背包</span></button>
     <button id="tQuest" class="tBtn">📜<span class="lbl">任务</span></button>
+    <button id="tInv"   class="tBtn tInvBig">🎒<span class="lbl">背包</span></button>
     <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
     <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
   </div>

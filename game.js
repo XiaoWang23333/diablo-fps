@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.26.0';
+const GAME_VERSION = 'v0.27.0';
 const GAME_BUILD   = '2026-06-02';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -1207,10 +1207,26 @@ function showDeathOverlay(){
   if(info) info.innerHTML =
     `你倒在了血色荒野。<br/>等级：Lv.${player.level}　击杀：${player.killCount}　<b style="color:#ff8a8a">死亡：${player.deathCount||1}</b><br/><br/>`+
     '<b style="color:#ff8a8a">点击屏幕（或手柄 Start）复活</b><br/>'+
-    '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌；或点击下方「读取存档」回到上次存档点</span>';
+    '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌；可点下方「读取存档」回到上次存档点，或点「打开背包」整理装备</span>'+
+    '<div style="margin-top:10px;display:flex;gap:10px;justify-content:center">'+
+    '  <button id="btnDeathInv" style="padding:8px 20px;font-size:13px;border:1px solid var(--gold);background:#241c10;color:var(--gold);border-radius:4px;cursor:pointer;letter-spacing:2px">🎒 打开背包</button>'+
+    '</div>';
   // 死亡时仍显示存读档按钮（玩家可以选择从上次存档复活）
   const slBar = document.getElementById('saveLoadBar');
   if(slBar) slBar.style.display='flex';
+  // 绑定背包按钮（每次重建）
+  const di = document.getElementById('btnDeathInv');
+  if(di){
+    const open = (e)=>{ e && e.stopPropagation && e.stopPropagation(); e && e.preventDefault && e.preventDefault();
+      // 死亡时不再调用 toggleInv（它会 controls.lock 拉回战斗），单独打开
+      invPanel.style.display='block';
+      _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
+      if(typeof rebuildInv==='function') rebuildInv();
+      Audio.uiOpen && Audio.uiOpen();
+    };
+    di.addEventListener('click', open);
+    di.addEventListener('touchstart', open, {passive:false});
+  }
 }
 function clearOverlayState(){
   overlay.classList.remove('ov-pause','ov-death');
@@ -1334,6 +1350,48 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
   makeStick('tStick',  'l');     // 左摇杆 → 移动
   makeStick('tStickR', 'r');     // 右摇杆 → 视角
 
+  // 触屏：3D 视口空白处单指拖动，也可转视角（与右摇杆并存）
+  // 排除：所有触屏控件、面板、技能槽
+  let lookId = -1, lx0=0, ly0=0;
+  const isControlEl = (el)=>{
+    if(!el) return false;
+    return !!(el.closest && el.closest(
+      '#tStick, #tStickR, #tHp, #tMp, #tInv, #tQuest, #tAuto, #tPause, #tJump, #tFnRow,'+
+      '#invPanel, #fusePanel, #gemUsePanel, #socketPanel, #overlay, #questPanel, #toggleBar, .slot, .tip'
+    ));
+  };
+  document.addEventListener('touchstart', (e)=>{
+    if(InputMode.current!=='touch') return;
+    if(!controls.isLocked) return;
+    for(const t of e.changedTouches){
+      const target = document.elementFromPoint(t.clientX, t.clientY);
+      if(isControlEl(target)) continue;
+      lookId = t.identifier; lx0 = t.clientX; ly0 = t.clientY;
+      break;
+    }
+  }, {passive:true});
+  document.addEventListener('touchmove', (e)=>{
+    if(InputMode.current!=='touch') return;
+    if(!controls.isLocked) return;
+    for(const t of e.changedTouches){
+      if(t.identifier!==lookId) continue;
+      const dx = t.clientX - lx0, dy = t.clientY - ly0;
+      lx0 = t.clientX; ly0 = t.clientY;
+      const eu = controls._euler;
+      eu.setFromQuaternion(camera.quaternion);
+      eu.y -= dx * 0.0035;
+      eu.x -= dy * 0.0018;       // Y 轴灵敏度调低
+      eu.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, eu.x));
+      camera.quaternion.setFromEuler(eu);
+    }
+  }, {passive:true});
+  const endLook = (e)=>{
+    for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=-1; }
+  };
+  document.addEventListener('touchend',    endLook, {passive:true});
+  document.addEventListener('touchcancel', endLook, {passive:true});
+
+
   // 按钮：用 touchstart 立刻响应；阻止冒泡 + 阻止默认避免 ghost click
   const bind = (id, fn)=>{
     const el = document.getElementById(id);
@@ -1423,9 +1481,9 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
     if(!el) return;
     const tryHide = (ev)=>{
       if(InputMode.current!=='touch') return;
-      // 点到背包格 / tip 操作按钮 / 操作 tip 本身 → 不要关闭 tip
+      // 点到背包格 / 装备格 / tip 操作按钮 / tip 本身 → 不要关闭 tip
       const t = ev.target;
-      if(t && t.closest && (t.closest('.invSlot') || t.closest('.tip') || t.closest('.gemUseEq') || t.closest('.fuseRow') || t.closest('.hole2'))) return;
+      if(t && t.closest && (t.closest('.invSlot') || t.closest('.eqSlot') || t.closest('.tip') || t.closest('.gemUseEq') || t.closest('.fuseRow') || t.closest('.hole2'))) return;
       if(typeof hideTip==='function') hideTip();
     };
     el.addEventListener('touchstart', tryHide, {passive:true});
@@ -1452,8 +1510,8 @@ function startOrResumeGame(){
   if(typeof clearOverlayState==='function') clearOverlayState();
   _justStartedAt = performance.now();
 
-  // ② 启动音频（用户手势内，AudioContext 才允许 resume）
-  try{ Audio.init(); Audio.startBGM(); }catch(err){ console.warn('[start] Audio failed:', err); }
+  // ② 启动音频上下文（仅 ensure，不再播放 BGM——用户反馈已去除背景音乐）
+  try{ Audio.init(); }catch(err){ console.warn('[start] Audio failed:', err); }
 
   // ③ 尝试锁定鼠标 —— 失败也无所谓，fallback 模式可玩
   // 触屏模式：直接走 fallback（不请求 PointerLock，避免在移动浏览器报错），
@@ -1728,6 +1786,12 @@ function useExpTome(idx){
   const gain = it.exp || 50;
   player.inv.splice(idx, 1);
   Audio.levelUp && Audio.levelUp();
+  // 经验条短暂高亮 + 增长动画提示
+  const expBar = document.getElementById('expbar');
+  if(expBar){
+    expBar.classList.add('expFlash');
+    setTimeout(()=>expBar.classList.remove('expFlash'), 1400);
+  }
   gainExp(gain);
   toast(`📖 研读经验之书，获得 ${gain} 经验`);
   rebuildInv();
@@ -1911,6 +1975,13 @@ function rollSocketCount(qualityKey){
 }
 
 function applyEquipStats(){
+  // 记录变更前的关键属性，用于结束时飘字提示属性变化
+  const _prev = (player && player._eq) ? {
+    str: player._strTotal||0, dex: player._dexTotal||0, int: player._intTotal||0,
+    hpMax: player.hpMax||0, mpMax: player.mpMax||0, armor: player.armor||0,
+    dmgPct: (player._eq.dmgPct||0), critChance: (player._eq.critChance||0),
+    critDmg: (player._eq.critDmg||0), lifeOnHit: (player._eq.lifeOnHit||0)
+  } : null;
   const stats={str:0,dex:0,int:0,hpMax:0,mpMax:0,armor:0,dmgPct:0,critChance:0,critDmg:0,lifeOnHit:0,hpRegen:0,mpRegen:0};
   // 统计已装备的套装件数
   const setCount={};
@@ -1979,6 +2050,15 @@ function applyEquipStats(){
   refreshSkillBar();refreshInfo();refreshEquip();
   // 重建第一人称手持武器（每次装备/换武器都会调用）
   if(typeof rebuildViewWeapon === 'function') rebuildViewWeapon();
+  // 属性变化飘字（仅当不是初始化时）
+  if(_prev && typeof spawnStatChangeFloats==='function'){
+    spawnStatChangeFloats(_prev, {
+      str: player._strTotal||0, dex: player._dexTotal||0, int: player._intTotal||0,
+      hpMax: player.hpMax||0, mpMax: player.mpMax||0, armor: player.armor||0,
+      dmgPct:(player._eq.dmgPct||0), critChance:(player._eq.critChance||0),
+      critDmg:(player._eq.critDmg||0), lifeOnHit:(player._eq.lifeOnHit||0)
+    });
+  }
 }
 
 // ---------- 任务系统 ----------
@@ -2835,7 +2915,7 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   if(isElite){tintEnemyBody(mesh,0x6a3aff,.6);}
   if(isBoss){mesh.scale.setScalar(1.8);tintEnemyBody(mesh,0xff2020,.8);}
   const hpBar=new THREE.Sprite(new THREE.SpriteMaterial({map:makeHpBarTex(1,isBoss?'#ff3030':isElite?'#c08aff':'#ff7070'),depthTest:false,transparent:true}));
-  hpBar.scale.set(isBoss?3:2,isBoss?0.04:.18,1);hpBar.position.y=isBoss?5:2.7;mesh.add(hpBar);e.hpBar=hpBar;
+  hpBar.scale.set(isBoss?3:2,isBoss?0.04:.18,1);hpBar.position.y=isBoss?3.5:2.7;mesh.add(hpBar);e.hpBar=hpBar;
   // BOSS 始终显示血条；普通敌人/精英默认隐藏，受伤后才显示
   e.hpBarVisibleTimer = 0;       // >0 时显示；每帧递减到 0 后隐藏
   if(!isBoss){
@@ -3214,7 +3294,7 @@ const _aiToP=new THREE.Vector3(), _aiSep=new THREE.Vector3();
 // 性能优化②：投射物对象池（玩家/敌人投射物每秒大量生成销毁，复用 mesh+材质+点光源消除战斗 GC 卡顿）
 const _projGeo = new THREE.SphereGeometry(0.25, 8, 8);  // 共享球体几何，按需缩放
 const _projPool = [];
-function acquireProj(scale, color, lightDist){
+function acquireProj(scale, color, lightDist, kind){
   let m = _projPool.pop();
   if(!m){
     m = new THREE.Mesh(_projGeo, new THREE.MeshBasicMaterial());
@@ -3225,19 +3305,66 @@ function acquireProj(scale, color, lightDist){
   m.userData.pl.color.set(color);
   m.userData.pl.distance = lightDist || 6;
   m.scale.setScalar(scale / 0.25);   // 基础几何半径 0.25，缩放到目标大小
+  // 清理上一次的装饰
+  if(m.userData.deco){ m.remove(m.userData.deco); m.userData.deco = null; }
+  // 根据 kind 添加不同造型装饰
+  if(kind){
+    let deco = null;
+    if(kind==='fireball'){
+      // 火球：核心球 + 外圈火焰光环
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.42, 0.10, 6, 12),
+        new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.7})
+      );
+      ring.rotation.x = Math.PI/2;
+      deco = ring;
+    } else if(kind==='iceshard'){
+      // 冰晶：八面体（晶体感）
+      deco = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.6, 0),
+        new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.85, wireframe:false})
+      );
+    } else if(kind==='arrow'){
+      // 多重射击的箭：细长锥体（头朝运动方向 = mesh 的 +Z 由 lookAt 设置）
+      deco = new THREE.Mesh(
+        new THREE.ConeGeometry(0.18, 1.0, 5),
+        new THREE.MeshBasicMaterial({color})
+      );
+      deco.rotation.x = -Math.PI/2;
+    } else if(kind==='bolt'){
+      // 穿刺箭：长条胶囊
+      deco = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.04, 1.2, 6),
+        new THREE.MeshBasicMaterial({color})
+      );
+      deco.rotation.x = -Math.PI/2;
+    }
+    if(deco){
+      m.add(deco);
+      m.userData.deco = deco;
+    }
+  }
   m.visible = true; scene.add(m);
   return m;
 }
-function releaseProj(m){ scene.remove(m); _projPool.push(m); }
+function releaseProj(m){
+  if(m.userData && m.userData.deco){ m.remove(m.userData.deco); m.userData.deco=null; }
+  scene.remove(m); _projPool.push(m);
+}
 
 // 性能优化②：掉落物共享几何体（频率较低 + 含特殊道具，仅共享几何体，避免对象池复位风险）
 const _lootGeo = new THREE.OctahedronGeometry(.25);
 const _lootBeamGeo = new THREE.CylinderGeometry(.05,.05,2,6);
 
 function shootProjectile(opts){
-  const {origin,dir,color,range,speed=35,scale=.25,dmg,hit,pierce=false,life=2}=opts;
-  const m=acquireProj(scale,color,6);
+  const {origin,dir,color,range,speed=35,scale=.25,dmg,hit,pierce=false,life=2,kind}=opts;
+  const m=acquireProj(scale,color,6,kind);
   m.position.copy(origin);
+  // 让 deco（锥/胶囊）朝运动方向
+  if(m.userData.deco){
+    const v = dir.clone().normalize();
+    m.lookAt(m.position.clone().add(v));
+  }
   projectiles.push({mesh:m,dir:dir.clone().normalize(),speed,dmg,life,range,traveled:0,pierce,hits:new Set(),hit});
 }
 function spawnAoe(pos,radius,dmgFn,color=0xff8030,dur=.4){
@@ -3741,7 +3868,7 @@ function castSkill(skill){
     Audio.cast_proj();
     const t=findBestTarget(skill.range,true);
     const dir=t?aimAt(t,origin):aimDir.clone();
-    shootProjectile({origin,dir,color:skill.color,range:skill.range,speed:32,scale:.3,
+    shootProjectile({origin,dir,color:skill.color,range:skill.range,speed:32,scale:.3,kind:skill.key,
       hit:e=>{const d=calcPlayerDamage(skill);damageEnemy(e,d);
         if(skill.key==='iceshard')e.slow=2;
         if(skill.key==='fireball')spawnAoe(e.mesh.position.clone(),3,()=>calcPlayerDamage(skill),0xff5a1a,.4);}});
@@ -3754,7 +3881,7 @@ function castSkill(skill){
     const baseDir=t?aimAt(t,origin):aimDir.clone();
     for(let i=-1;i<=1;i++){
       const d2=baseDir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),i*.18);
-      shootProjectile({origin,dir:d2,color:skill.color,range:skill.range,speed:42,scale:.18,
+      shootProjectile({origin,dir:d2,color:skill.color,range:skill.range,speed:42,scale:.18,kind:'arrow',
         hit:e=>damageEnemy(e,calcPlayerDamage(skill))});
     }return true;
   }
@@ -3763,7 +3890,7 @@ function castSkill(skill){
     Audio.cast_proj();
     const t=findBestTarget(skill.range,true);
     const dir=t?aimAt(t,origin):aimDir.clone();
-    shootProjectile({origin,dir,color:skill.color,range:skill.range,speed:45,scale:.18,pierce:true,
+    shootProjectile({origin,dir,color:skill.color,range:skill.range,speed:45,scale:.18,pierce:true,kind:'bolt',
       hit:e=>damageEnemy(e,calcPlayerDamage(skill))});
     return true;
   }
@@ -3979,10 +4106,42 @@ function refreshEquip(){
     }
     el.innerHTML = `<span style="color:${v.quality.color}">${v.name}</span>`;
     el.style.cursor = 'help';
+    el.classList.add('eqSlot');     // 用于触屏点击识别
     // 悬停显示 tip
     el.onmouseenter = e=>{ showTip(v, e.clientX, e.clientY); };
     el.onmousemove  = e=>{ showTip(v, e.clientX, e.clientY); };
     el.onmouseleave = ()=>{ hideTip(); };
+    // 触屏点击：显示持久 tip + 卸下按钮
+    el.onclick = (ev)=>{
+      if(InputMode && InputMode.current==='touch'){
+        ev.stopPropagation();
+        const r = el.getBoundingClientRect();
+        // 临时把已穿戴装备显示为 tip + 卸下按钮，类似背包格
+        showTip(v, r.right, r.top);
+        if(tipEl.style.display!=='none'){
+          let actEl = tipEl.querySelector('#tipActions');
+          if(actEl) actEl.remove();
+          actEl = document.createElement('div'); actEl.id = 'tipActions';
+          const mkBtn = (lbl, fn, cls)=>{
+            const b=document.createElement('button'); b.textContent=lbl;
+            if(cls) b.className=cls;
+            const stop=(e)=>{ e.stopPropagation(); e.preventDefault && e.preventDefault(); fn(); };
+            b.addEventListener('click', stop);
+            b.addEventListener('touchstart', stop, {passive:false});
+            return b;
+          };
+          actEl.appendChild(mkBtn('卸下', ()=>{
+            if(player.inv.length >= INV_CAP){ toast('背包已满，无法卸下'); return; }
+            player.inv.push(v);
+            player.equip[slot] = null;
+            hideTip(); applyEquipStats(); rebuildInv();
+            toast(`卸下：${v.name}`);
+          }, 'danger'));
+          actEl.appendChild(mkBtn('关闭', ()=>{ hideTip(); }));
+          tipEl.appendChild(actEl);
+        }
+      }
+    };
     // 右键卸下到背包（有空位时）
     el.oncontextmenu = e=>{
       e.preventDefault();
@@ -4114,6 +4273,41 @@ function showTip(it,x,y){
   tipEl.style.display='block';
   tipEl.style.left='-9999px';   // 临时隐藏出屏幕，避免一帧闪烁
   tipEl.style.top='-9999px';
+
+  // ============ 触屏模式：居中模态布局，主 tip 在上，对比 tip 在下 ============
+  if(InputMode && InputMode.current==='touch'){
+    // 主 tip：居中、宽度 86vw、最大 360px
+    const w = Math.min(360, innerWidth - 24);
+    tipEl.style.width = w + 'px';
+    tipEl.style.maxWidth = w + 'px';
+    tipEl.style.maxHeight = '40vh';
+    tipEl.style.overflowY = 'auto';
+    tipEl.style.left = ((innerWidth - w)/2) + 'px';
+    tipEl.style.top  = '12vh';
+    // 对比
+    const cur = player.equip[it.slot];
+    if(cur && cur!==it){
+      const better = itemScore(it) > itemScore(cur);
+      tipCmpEl.innerHTML =
+        `<div style="color:${better?'#7bd96a':'#ff7070'};font-size:11px;margin-bottom:2px">`+
+        `当前已装备  (评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'})</div>`+
+        itemTipHtml(cur);
+      tipCmpEl.style.display='block';
+      tipCmpEl.style.width = w + 'px';
+      tipCmpEl.style.maxWidth = w + 'px';
+      tipCmpEl.style.maxHeight = '32vh';
+      tipCmpEl.style.overflowY = 'auto';
+      tipCmpEl.style.left = ((innerWidth - w)/2) + 'px';
+      // 主 tip 实际高度（含按钮区由调用方追加，先估算）
+      const th = Math.min(tipEl.offsetHeight, innerHeight*0.40);
+      tipCmpEl.style.top  = `calc(12vh + ${th}px + 8px)`;
+    } else {
+      tipCmpEl.style.display='none';
+    }
+    return;
+  }
+
+  // ============ 桌面/手柄模式：原浮动布局 ============
   // 测量 tip 实际尺寸
   const tw = tipEl.offsetWidth  || 260;
   const th = tipEl.offsetHeight || 200;
@@ -4122,7 +4316,6 @@ function showTip(it,x,y){
   const invOpen = invPanel && invPanel.style.display==='block';
   const pr = invOpen ? invPanel.getBoundingClientRect() : null;
   if(pr){
-    // 优先放面板右侧；放不下则放左侧；都放不下再退回光标定位
     if(pr.right + 12 + tw <= innerWidth - 4){
       tx = pr.right + 12;
     } else if(pr.left - 12 - tw >= 4){
@@ -4131,18 +4324,14 @@ function showTip(it,x,y){
       tx = x + 14;
       if(tx + tw > innerWidth - 4) tx = Math.max(4, x - 14 - tw);
     }
-    // 纵向尽量跟随光标，但限制在面板范围附近且不超出屏幕
     ty = Math.min(Math.max(y - th*0.3, pr.top), pr.bottom - th);
     if(ty < 4) ty = 4;
   } else {
-    // 决定放在光标的右还是左：右边放不下就放左
     tx = x + 14;
     if(tx + tw > innerWidth - 4) tx = Math.max(4, x - 14 - tw);
-    // 决定放在光标的下还是上：下边放不下就放上
     ty = y + 14;
     if(ty + th > innerHeight - 4) ty = Math.max(4, y - 14 - th);
   }
-  // 兜底再 clamp 一次
   tx = Math.max(4, Math.min(tx, innerWidth  - tw - 4));
   ty = Math.max(4, Math.min(ty, innerHeight - th - 4));
   tipEl.style.left = tx + 'px';
@@ -4160,13 +4349,11 @@ function showTip(it,x,y){
     tipCmpEl.style.top='-9999px';
     const cw = tipCmpEl.offsetWidth  || 260;
     const ch = tipCmpEl.offsetHeight || 200;
-    // 优先放在主 tip 右侧；放不下则放左侧；都放不下则放主 tip 下方
     let cx = tx + tw + 8;
     let cy = ty;
     if(cx + cw > innerWidth - 4){
       cx = tx - cw - 8;
       if(cx < 4){
-        // 左右都放不下 → 放主 tip 上方或下方
         cx = Math.max(4, Math.min(tx, innerWidth - cw - 4));
         cy = ty + th + 8;
         if(cy + ch > innerHeight - 4) cy = Math.max(4, ty - ch - 8);
@@ -4179,7 +4366,12 @@ function showTip(it,x,y){
     tipCmpEl.style.display='none';
   }
 }
-function hideTip(){tipEl.style.display='none';tipCmpEl.style.display='none';}
+function hideTip(){
+  tipEl.style.display='none'; tipCmpEl.style.display='none';
+  // 触屏模式下 tip 用了 inline width/maxWidth，下次显示前清掉
+  tipEl.style.width=''; tipEl.style.maxWidth=''; tipEl.style.maxHeight=''; tipEl.style.overflowY='';
+  tipCmpEl.style.width=''; tipCmpEl.style.maxWidth=''; tipCmpEl.style.maxHeight=''; tipCmpEl.style.overflowY='';
+}
 
 // 触屏模式：显示装备/物品 tip 时附带操作按钮（装备/替换/使用/丢弃）
 // 调用时 idx 为该物品在 player.inv 的下标
@@ -5377,7 +5569,9 @@ function refreshFuseHint(){
     rightHtml = `<span style="color:#e8c45a">📜 背包扩容卷轴</span>`;
   } else if(grp.kind==='gem'){
     const fromG = GEM_GRADES[grp.grade];
-    const toG   = GEM_GRADES[grp.grade+1];
+    // 完美宝石（最高级）合成产物仍为完美：用 grp.toGrade 兜底，越界时回到自身
+    const toGradeIdx = (grp.toGrade!=null) ? grp.toGrade : Math.min(GEM_GRADES.length-1, grp.grade+1);
+    const toG = GEM_GRADES[toGradeIdx] || fromG;
     leftHtml  = `<span style="color:${fromG.color}">3× ${fromG.name}宝石（任意）</span>`;
     rightHtml = `<span style="color:${toG.color}">1× ${toG.name}宝石</span>`;
   } else if(grp.kind==='potion'){
@@ -5446,6 +5640,22 @@ function gemModalOpen(){
   const g=document.getElementById('gemUsePanel');
   const s=document.getElementById('socketPanel');
   return (g && g.style.display==='flex') || (s && s.style.display==='flex');
+}
+
+// 同步触屏血/蓝按钮上的瓶数角标
+function updatePotionCounts(){
+  let hp=0, mp=0;
+  if(player && player.inv){
+    for(const it of player.inv){
+      if(!it) continue;
+      if(it.special==='hpPotion') hp++;
+      else if(it.special==='mpPotion') mp++;
+    }
+  }
+  const hpEl = document.getElementById('tHpCnt');
+  const mpEl = document.getElementById('tMpCnt');
+  if(hpEl){ hpEl.textContent=hp; hpEl.classList.toggle('zero', hp===0); }
+  if(mpEl){ mpEl.textContent=mp; mpEl.classList.toggle('zero', mp===0); }
 }
 function rebuildInv(){
   // 容量条
@@ -5530,7 +5740,8 @@ function rebuildInv(){
     grid.appendChild(d);
   }
   refreshEquip();
-  // 重建后：如鼠标仍悬停在某格上，按新内容刷新 tip（替换/丢弃后立即同步）
+  // 同步触屏药水按钮的瓶数
+  if(typeof updatePotionCounts==='function') updatePotionCounts();
   // 仅当背包面板真正打开时才刷新/显示 tip——否则战斗中拾取触发的 rebuildInv
   // 会把上次悬停的物品 tip 重新弹到左上角（_mouseX/_mouseY 残留），挡住任务面板。
   if(invPanel && invPanel.style.display==='block' && _hoverIdx>=0){
@@ -5548,6 +5759,36 @@ function rebuildInv(){
 }
 const toastWrap=document.getElementById('toast');
 function toast(msg){const d=document.createElement('div');d.className='toast-item';d.textContent=msg;toastWrap.appendChild(d);setTimeout(()=>d.remove(),2100);}
+
+// 属性变化飘字（装备/镶嵌/卸下后调用）
+// before/after: { str, dex, int, hpMax, mpMax, armor, dmgPct, critChance, critDmg, lifeOnHit }
+function spawnStatChangeFloats(before, after){
+  if(!before || !after) return;
+  const labels = {
+    str:'力量', dex:'敏捷', int:'智力', hpMax:'生命', mpMax:'法力',
+    armor:'护甲', dmgPct:'伤害%', critChance:'暴击%', critDmg:'暴伤%', lifeOnHit:'命中回血'
+  };
+  const lines = [];
+  Object.keys(labels).forEach(k=>{
+    const d = (after[k]||0) - (before[k]||0);
+    if(Math.abs(d) < 0.5) return;
+    const sign = d>0 ? '+' : '';
+    const color = d>0 ? '#7bd96a' : '#ff7070';
+    lines.push(`<span style="color:${color}">${sign}${Math.round(d)} ${labels[k]}</span>`);
+  });
+  if(lines.length===0) return;
+  // 用一个独立浮层显示，2 秒后淡出
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:50%;top:35%;transform:translateX(-50%);z-index:18;pointer-events:none;'+
+    'background:rgba(0,0,0,.65);border:1px solid var(--gold);border-radius:6px;padding:8px 14px;'+
+    'font-size:13px;line-height:1.7;color:#ddd;text-align:center;letter-spacing:1px;'+
+    'box-shadow:0 0 18px rgba(232,196,90,.5);transition:opacity .4s,transform .8s;opacity:0';
+  wrap.innerHTML = '<div style="color:#aaa;font-size:11px;margin-bottom:4px">属性变化</div>'+lines.join('<br/>');
+  document.body.appendChild(wrap);
+  requestAnimationFrame(()=>{ wrap.style.opacity='1'; });
+  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translate(-50%,-30px)'; }, 1400);
+  setTimeout(()=>{ wrap.remove(); }, 2000);
+}
 const lootWrap=document.getElementById('loot');
 function addLootText(it){
   // 仅在玩家"拾取"时显示飘字（dropLoot 中已去掉调用，掉落不再飘字）
@@ -5633,15 +5874,22 @@ spawnWave();
 
 // ===== 存读档按钮连接（开始/暂停菜单内）=====
 (function wireSaveLoad(){
-  const stop = e=>{ e.stopPropagation(); e.preventDefault && e.preventDefault(); };
   const btnSave = document.getElementById('btnSave');
   const btnLoad = document.getElementById('btnLoad');
-  // 阻止按钮点击穿透到 overlay（否则会直接"开始游戏"）
-  [btnSave, btnLoad].forEach(b=>{ if(!b) return;
-    ['mousedown','click','touchstart','pointerdown'].forEach(ev=>b.addEventListener(ev, stop, {passive:false}));
-  });
-  if(btnSave) btnSave.addEventListener('click', ()=>{ saveGame(false); });
-  if(btnLoad) btnLoad.addEventListener('click', ()=>{ loadGame(); });
+  // 让按钮可点：在 touchstart 直接触发 + 阻止穿透到 overlay；click 兜底（鼠标）
+  const wire = (btn, fn)=>{
+    if(!btn) return;
+    let firing = false;
+    const trigger = (e)=>{
+      e.stopPropagation(); if(e.preventDefault) e.preventDefault();
+      if(firing) return; firing = true;
+      try{ fn(); }finally{ setTimeout(()=>{ firing=false; }, 300); }
+    };
+    btn.addEventListener('touchstart', trigger, {passive:false});
+    btn.addEventListener('click',      trigger);
+  };
+  wire(btnSave, ()=> saveGame(false));
+  wire(btnLoad, ()=> loadGame());
   // 启动时若检测到存档，提示玩家可读取
   if(hasSave()){
     try{
@@ -5830,15 +6078,16 @@ function update(dt){
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
-  // 触屏右摇杆驱动视角
+  // 触屏右摇杆驱动视角（Y 轴灵敏度调低，避免上下乱晃）
   if(InputMode.current==='touch' && controls.isLocked && (touchInput.rx || touchInput.ry)){
     const e = controls._euler;
     e.setFromQuaternion(camera.quaternion);
     e.y -= touchInput.rx * 2.6 * dt;
-    e.x -= touchInput.ry * 2.0 * dt;
+    e.x -= touchInput.ry * 1.0 * dt;     // Y 轴灵敏度下调 2.0 → 1.0
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
+
 
 
   // 移动（键盘 + 手柄）
