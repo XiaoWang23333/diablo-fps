@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.27.0';
-const GAME_BUILD   = '2026-06-02';
+const GAME_VERSION = 'v0.28.0';
+const GAME_BUILD   = '2026-06-06';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -1218,11 +1218,32 @@ function showDeathOverlay(){
   const di = document.getElementById('btnDeathInv');
   if(di){
     const open = (e)=>{ e && e.stopPropagation && e.stopPropagation(); e && e.preventDefault && e.preventDefault();
-      // 死亡时不再调用 toggleInv（它会 controls.lock 拉回战斗），单独打开
+      // 临时隐藏死亡 overlay 让出 z-index，背包关闭时再恢复
+      overlay.style.display = 'none';
+      // 背包面板需在 overlay 之上：临时拉高 z-index
+      invPanel.style.zIndex = 60;
       invPanel.style.display='block';
       _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
       if(typeof rebuildInv==='function') rebuildInv();
       Audio.uiOpen && Audio.uiOpen();
+      // 背包关闭按钮在死亡场景下需特别处理：关闭时恢复死亡 overlay
+      const invCb = document.getElementById('invCloseBtn');
+      if(invCb){
+        const restore = (ev)=>{
+          ev && ev.stopPropagation && ev.stopPropagation();
+          ev && ev.preventDefault && ev.preventDefault();
+          invPanel.style.display='none';
+          invPanel.style.zIndex='';
+          if(player._dead){
+            // 重新渲染死亡 overlay（dom 重建）
+            showDeathOverlay();
+          }
+          invCb.removeEventListener('click', restore);
+          invCb.removeEventListener('touchstart', restore);
+        };
+        invCb.addEventListener('click', restore, {once:true});
+        invCb.addEventListener('touchstart', restore, {passive:false, once:true});
+      }
     };
     di.addEventListener('click', open);
     di.addEventListener('touchstart', open, {passive:false});
@@ -3156,6 +3177,9 @@ let _autosaveEnabled = false;   // 防止页面首帧 init 的 spawnWave 在玩�
 function hasSave(){ try{ return !!localStorage.getItem(SAVE_KEY); }catch(e){ return false; } }
 
 function saveGame(silent){
+  // 死亡时禁止自动保存（避免把"满血复活前的死状态"写入覆盖旧档）；
+  // 死亡画面下手动点保存（silent=false）则尊重用户选择
+  if(silent && player && player._dead) return false;
   try{
     const data = {
       v: (typeof GAME_VERSION!=='undefined'?GAME_VERSION:'?'), ts: Date.now(),
@@ -3175,9 +3199,20 @@ function saveGame(silent){
       }
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    if(!silent){ setSaveStatus(`✅ 已保存：Lv.${player.level} · 第${Math.max(1,waveLevel-1)}波 · 难度${difficulty}`); toast('💾 进度已保存'); }
+    if(!silent){
+      setSaveStatus(`✅ 已保存：Lv.${player.level} · 第${Math.max(1,waveLevel-1)}波 · 难度${difficulty}`);
+      if(typeof showBigStatus==='function') showBigStatus('💾 进度已保存', '#7bd96a');
+      else toast('💾 进度已保存');
+    }
     return true;
-  }catch(e){ console.warn('[save] failed', e); if(!silent) setSaveStatus('❌ 保存失败：'+(e&&e.message||e)); return false; }
+  }catch(e){
+    console.warn('[save] failed', e);
+    if(!silent){
+      setSaveStatus('❌ 保存失败：'+(e&&e.message||e));
+      if(typeof showBigStatus==='function') showBigStatus('❌ 保存失败', '#ff7070');
+    }
+    return false;
+  }
 }
 
 // 把存档里的物品重新链接到规范 quality 对象（按 key），其余字段是纯数据可直接用
@@ -3236,7 +3271,8 @@ function loadGame(){
   spawnWave();
   _autosaveEnabled = true;   // 读档后开启自动存档
   setSaveStatus(`📂 已读取：Lv.${player.level} · 第${Math.max(1,waveLevel-1)}波 · 难度${difficulty}　点击屏幕继续`);
-  toast(`📂 存档已读取：Lv.${player.level} · 难度${difficulty}`);
+  if(typeof showBigStatus==='function') showBigStatus(`📂 存档已读取：Lv.${player.level}`, '#5aa6ff');
+  else toast(`📂 存档已读取：Lv.${player.level} · 难度${difficulty}`);
   return true;
 }
 
@@ -4276,34 +4312,25 @@ function showTip(it,x,y){
 
   // ============ 触屏模式：居中模态布局，主 tip 在上，对比 tip 在下 ============
   if(InputMode && InputMode.current==='touch'){
-    // 主 tip：居中、宽度 86vw、最大 360px
+    // 主 tip：居中、宽度 86vw、最大 360px；高度自适应不滚动（按钮 sticky 兜底）
     const w = Math.min(360, innerWidth - 24);
     tipEl.style.width = w + 'px';
     tipEl.style.maxWidth = w + 'px';
-    tipEl.style.maxHeight = '40vh';
+    tipEl.style.maxHeight = '70vh';
     tipEl.style.overflowY = 'auto';
     tipEl.style.left = ((innerWidth - w)/2) + 'px';
-    tipEl.style.top  = '12vh';
-    // 对比
+    tipEl.style.top  = '8vh';
+    // 对比当前同槽装备：直接放在主 tip 里，下方折叠区
     const cur = player.equip[it.slot];
     if(cur && cur!==it){
       const better = itemScore(it) > itemScore(cur);
-      tipCmpEl.innerHTML =
-        `<div style="color:${better?'#7bd96a':'#ff7070'};font-size:11px;margin-bottom:2px">`+
+      const html = `<hr style="border:none;border-top:1px dashed #444;margin:8px 0"/>`+
+        `<div style="color:${better?'#7bd96a':'#ff7070'};font-size:11px;margin-bottom:4px">`+
         `当前已装备  (评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'})</div>`+
         itemTipHtml(cur);
-      tipCmpEl.style.display='block';
-      tipCmpEl.style.width = w + 'px';
-      tipCmpEl.style.maxWidth = w + 'px';
-      tipCmpEl.style.maxHeight = '32vh';
-      tipCmpEl.style.overflowY = 'auto';
-      tipCmpEl.style.left = ((innerWidth - w)/2) + 'px';
-      // 主 tip 实际高度（含按钮区由调用方追加，先估算）
-      const th = Math.min(tipEl.offsetHeight, innerHeight*0.40);
-      tipCmpEl.style.top  = `calc(12vh + ${th}px + 8px)`;
-    } else {
-      tipCmpEl.style.display='none';
+      tipEl.innerHTML += html;
     }
+    tipCmpEl.style.display='none';
     return;
   }
 
@@ -5760,6 +5787,22 @@ function rebuildInv(){
 const toastWrap=document.getElementById('toast');
 function toast(msg){const d=document.createElement('div');d.className='toast-item';d.textContent=msg;toastWrap.appendChild(d);setTimeout(()=>d.remove(),2100);}
 
+// 醒目的大字提示（保存/读取成功等）— 屏幕中上居中、金边脉冲、2 秒淡出
+function showBigStatus(msg, color){
+  color = color || 'var(--gold)';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:50%;top:30%;transform:translate(-50%,0) scale(.85);z-index:55;pointer-events:none;'+
+    'background:rgba(0,0,0,.78);border:2px solid '+color+';border-radius:8px;padding:14px 28px;'+
+    'font-size:18px;font-weight:bold;color:'+color+';letter-spacing:2px;text-align:center;'+
+    'box-shadow:0 0 24px '+color+',0 0 60px rgba(0,0,0,.6);'+
+    'transition:opacity .3s,transform .35s cubic-bezier(.3,1.6,.5,1);opacity:0';
+  wrap.textContent = msg;
+  document.body.appendChild(wrap);
+  requestAnimationFrame(()=>{ wrap.style.opacity='1'; wrap.style.transform='translate(-50%,0) scale(1)'; });
+  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translate(-50%,-20px) scale(.95)'; }, 1500);
+  setTimeout(()=>{ wrap.remove(); }, 1900);
+}
+
 // 属性变化飘字（装备/镶嵌/卸下后调用）
 // before/after: { str, dex, int, hpMax, mpMax, armor, dmgPct, critChance, critDmg, lifeOnHit }
 function spawnStatChangeFloats(before, after){
@@ -5777,16 +5820,16 @@ function spawnStatChangeFloats(before, after){
     lines.push(`<span style="color:${color}">${sign}${Math.round(d)} ${labels[k]}</span>`);
   });
   if(lines.length===0) return;
-  // 用一个独立浮层显示，2 秒后淡出
+  // 用一个独立浮层显示，挂左侧（避开关卡进度面板下方），2 秒后向上淡出
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;left:50%;top:35%;transform:translateX(-50%);z-index:18;pointer-events:none;'+
-    'background:rgba(0,0,0,.65);border:1px solid var(--gold);border-radius:6px;padding:8px 14px;'+
-    'font-size:13px;line-height:1.7;color:#ddd;text-align:center;letter-spacing:1px;'+
-    'box-shadow:0 0 18px rgba(232,196,90,.5);transition:opacity .4s,transform .8s;opacity:0';
+  wrap.style.cssText = 'position:fixed;left:calc(12px + var(--safe-l));top:35%;z-index:18;pointer-events:none;'+
+    'background:rgba(0,0,0,.65);border:1px solid var(--gold);border-radius:6px;padding:8px 12px;'+
+    'font-size:13px;line-height:1.7;color:#ddd;text-align:left;letter-spacing:1px;max-width:42vw;'+
+    'box-shadow:0 0 18px rgba(232,196,90,.5);transition:opacity .4s,transform .8s;opacity:0;transform:translateY(0)';
   wrap.innerHTML = '<div style="color:#aaa;font-size:11px;margin-bottom:4px">属性变化</div>'+lines.join('<br/>');
   document.body.appendChild(wrap);
   requestAnimationFrame(()=>{ wrap.style.opacity='1'; });
-  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translate(-50%,-30px)'; }, 1400);
+  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translateY(-30px)'; }, 1400);
   setTimeout(()=>{ wrap.remove(); }, 2000);
 }
 const lootWrap=document.getElementById('loot');
@@ -6082,8 +6125,8 @@ function update(dt){
   if(InputMode.current==='touch' && controls.isLocked && (touchInput.rx || touchInput.ry)){
     const e = controls._euler;
     e.setFromQuaternion(camera.quaternion);
-    e.y -= touchInput.rx * 2.6 * dt;
-    e.x -= touchInput.ry * 1.0 * dt;     // Y 轴灵敏度下调 2.0 → 1.0
+    e.y -= touchInput.rx * 1.6 * dt;     // X 灵敏度 2.6 → 1.6
+    e.x -= touchInput.ry * 0.7 * dt;     // Y 灵敏度 1.0 → 0.7
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
