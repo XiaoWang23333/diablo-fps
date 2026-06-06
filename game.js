@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.29.0';
+const GAME_VERSION = 'v0.30.0';
 const GAME_BUILD   = '2026-06-06';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -1242,8 +1242,15 @@ function showDeathOverlay(){
       if(typeof closeSocketPanel==='function') closeSocketPanel();
       // 临时隐藏死亡 overlay 让出 z-index，背包关闭时再恢复
       overlay.style.display = 'none';
-      // 背包面板需在 overlay 之上：临时拉高 z-index
+      // 死亡场景下整个 UI 层级需要拉高——overlay 默认 z=50，invPanel=20、tip=30、gemUse/socket=25 都低于 overlay，
+      // 如果只显示 invPanel 不动 z-index，玩家点装备弹出的 tip 会被 overlay/invPanel 自身遮挡看不见，
+      // 表现就是"点了没反应"。这里把整套 UI 层级整体抬到 overlay 之上：
       invPanel.style.zIndex = 60;
+      tipEl.style.zIndex = 70;
+      tipCmpEl.style.zIndex = 70;
+      const gup = document.getElementById('gemUsePanel');     if(gup) gup.style.zIndex = 65;
+      const sop = document.getElementById('socketPanel');     if(sop) sop.style.zIndex = 65;
+      const fup = document.getElementById('fusePanel');       if(fup) fup.style.zIndex = 65;
       invPanel.style.display='block';
       _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
       if(typeof rebuildInv==='function') rebuildInv();
@@ -1258,7 +1265,13 @@ function showDeathOverlay(){
           if(typeof closeGemUsePanel==='function') closeGemUsePanel();
           if(typeof closeSocketPanel==='function') closeSocketPanel();
           invPanel.style.display='none';
+          // 复位所有临时拉高的 z-index
           invPanel.style.zIndex='';
+          tipEl.style.zIndex='';
+          tipCmpEl.style.zIndex='';
+          if(gup) gup.style.zIndex='';
+          if(sop) sop.style.zIndex='';
+          if(fup) fup.style.zIndex='';
           if(player._dead){
             // 重新渲染死亡 overlay（dom 重建）
             showDeathOverlay();
@@ -4472,12 +4485,18 @@ function showTip(it,x,y){
     tipEl.style.left = ((innerWidth - w)/2) + 'px';
     tipEl.style.top  = '8vh';
     // 对比当前同槽装备：直接放在主 tip 里，下方折叠区
-    const cur = player.equip[it.slot];
+    const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
       const better = itemScore(it) > itemScore(cur);
-      const html = `<hr style="border:none;border-top:1px dashed #444;margin:8px 0"/>`+
-        `<div style="color:${better?'#7bd96a':'#ff7070'};font-size:11px;margin-bottom:4px">`+
-        `当前已装备  (评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'})</div>`+
+      // 醒目实线分隔条 + 「当前装备」标题（带颜色 chip）
+      const html =
+        `<div style="margin:10px -10px 8px;padding:6px 10px;`+
+        `background:linear-gradient(90deg,transparent,${better?'rgba(123,217,106,.18)':'rgba(255,112,112,.18)'},transparent);`+
+        `border-top:2px solid ${better?'#7bd96a':'#ff7070'};`+
+        `border-bottom:2px solid ${better?'#7bd96a':'#ff7070'};`+
+        `text-align:center;font-size:12px;color:${better?'#7bd96a':'#ff7070'};font-weight:bold;letter-spacing:3px">`+
+        `▼ 当前已装备 ▼  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'}`+
+        `</div>`+
         itemTipHtml(cur);
       tipEl.innerHTML += html;
     }
@@ -4515,12 +4534,17 @@ function showTip(it,x,y){
   tipEl.style.left = tx + 'px';
   tipEl.style.top  = ty + 'px';
   // 对比当前同槽装备
-  const cur=player.equip[it.slot];
+  const cur=it.slot ? player.equip[it.slot] : null;
   if(cur && cur!==it){
     const better=itemScore(it)>itemScore(cur);
     tipCmpEl.innerHTML=
-      `<div style="color:${better?'#7bd96a':'#ff7070'};font-size:11px;margin-bottom:2px">`+
-      `当前已装备  (评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'})</div>`+
+      `<div style="margin:-2px -8px 6px;padding:5px 8px;`+
+      `background:linear-gradient(90deg,transparent,${better?'rgba(123,217,106,.18)':'rgba(255,112,112,.18)'},transparent);`+
+      `border-top:2px solid ${better?'#7bd96a':'#ff7070'};`+
+      `border-bottom:2px solid ${better?'#7bd96a':'#ff7070'};`+
+      `text-align:center;font-size:11px;color:${better?'#7bd96a':'#ff7070'};font-weight:bold;letter-spacing:2px">`+
+      `当前已装备  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'}`+
+      `</div>`+
       itemTipHtml(cur);
     tipCmpEl.style.display='block';
     tipCmpEl.style.left='-9999px';
@@ -4574,17 +4598,23 @@ function showItemTipWithActions(it, idx, x, y){
     buttons.push({lbl:'研读', fn:()=>{ useExpTome(idx); hideTip(); }});
   } else if(it.special==='bagExpand'){
     buttons.push({lbl:'使用', fn:()=>{ useBagExpandScroll(idx); hideTip(); }});
-  } else if(it.slot && it.quality){
+  } else if(it.slot){
+    // 装备类（凡是有 slot 字段就算装备：盔甲/武器/戒指/头盔）
+    // 旧逻辑要求 it.quality 才显示装备按钮，但合成产物 / 老存档可能 quality 为空，导致按钮消失
     const cur = player.equip[it.slot];
-    buttons.push({lbl: cur ? '替换装备' : '装备', fn:()=>{
+    buttons.push({lbl: cur ? '替换装备' : '装 备', fn:()=>{
       const c = player.equip[it.slot];
       player.equip[it.slot] = it;
       player.inv.splice(idx,1);
       if(c) player.inv.splice(idx,0,c);
       applyEquipStats(); rebuildInv();
-      if(typeof Quests!=='undefined'){ Quests.onEvent('equip', {qualityKey: it.quality.key}); }
+      if(typeof Quests!=='undefined' && it.quality){ Quests.onEvent('equip', {qualityKey: it.quality.key}); }
       hideTip();
     }});
+    // 装备且有空孔位：补充"镶嵌宝石"快捷按钮
+    if((it.sockets||0) > 0){
+      buttons.push({lbl:'打开孔位', fn:()=>{ hideTip(); if(typeof openSocketPanel==='function') openSocketPanel(); }});
+    }
   }
   buttons.push({lbl:'丢弃', cls:'danger', fn:()=>{ dropFromInv(idx); hideTip(); }});
   buttons.push({lbl:'关闭', fn:()=>{ hideTip(); }});
@@ -5972,16 +6002,18 @@ function spawnStatChangeFloats(before, after){
   });
   if(lines.length===0) return;
   // 用一个独立浮层显示，挂左侧（避开关卡进度面板下方），2 秒后向上淡出
+  // z-index 必须高于 invPanel(20)/gemUsePanel(25) 以及死亡 overlay 临时拉高的 60，
+  // 否则装备替换 / 宝石镶嵌后的属性变化提示会被这些面板挡住，玩家以为"没出现"。
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;left:calc(12px + var(--safe-l));top:35%;z-index:18;pointer-events:none;'+
-    'background:rgba(0,0,0,.65);border:1px solid var(--gold);border-radius:6px;padding:8px 12px;'+
+  wrap.style.cssText = 'position:fixed;left:calc(12px + var(--safe-l));top:35%;z-index:80;pointer-events:none;'+
+    'background:rgba(0,0,0,.78);border:2px solid var(--gold);border-radius:6px;padding:10px 14px;'+
     'font-size:13px;line-height:1.7;color:#ddd;text-align:left;letter-spacing:1px;max-width:42vw;'+
-    'box-shadow:0 0 18px rgba(232,196,90,.5);transition:opacity .4s,transform .8s;opacity:0;transform:translateY(0)';
-  wrap.innerHTML = '<div style="color:#aaa;font-size:11px;margin-bottom:4px">属性变化</div>'+lines.join('<br/>');
+    'box-shadow:0 0 22px rgba(232,196,90,.7);transition:opacity .4s,transform .8s;opacity:0;transform:translateY(0)';
+  wrap.innerHTML = '<div style="color:var(--gold);font-size:11px;margin-bottom:5px;letter-spacing:2px;font-weight:bold">✦ 属性变化 ✦</div>'+lines.join('<br/>');
   document.body.appendChild(wrap);
   requestAnimationFrame(()=>{ wrap.style.opacity='1'; });
-  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translateY(-30px)'; }, 1400);
-  setTimeout(()=>{ wrap.remove(); }, 2000);
+  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translateY(-30px)'; }, 1800);
+  setTimeout(()=>{ wrap.remove(); }, 2400);
 }
 const lootWrap=document.getElementById('loot');
 function addLootText(it){

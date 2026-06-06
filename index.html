@@ -335,14 +335,22 @@
   #tMp .cnt{border-color:#5aa6ff;color:#a0c8ff}
   .tBtn .cnt.zero{opacity:0.4}
   /* 底部功能键行：暂停/背包/任务/托管/跳，最下方 */
-  #tFnRow{position:absolute;left:50%;bottom:calc(8px + var(--safe-b));transform:translateX(-50%);
+  #tFnRow{position:absolute;left:50%;bottom:calc(20px + var(--safe-b));transform:translateX(-50%);
           display:flex;gap:10px;pointer-events:none;z-index:9;align-items:center}
   #tFnRow .tBtn{position:relative;left:0;right:0;bottom:0;width:42px;height:42px;font-size:14px}
+  /* 功能键文字标签：紧贴按钮底部外侧（按钮上移到 bottom:20px 后留出空间显示） */
+  #tFnRow .tBtn .lbl{bottom:-12px;font-size:9px}
   /* 背包按钮放大且更醒目（金边脉冲） */
   #tFnRow .tInvBig{width:58px;height:58px;font-size:22px;border-color:var(--gold);
                    background:radial-gradient(circle,#3a2a14 0%,#15110b 80%);
                    box-shadow:0 0 14px rgba(232,196,90,.55), 0 0 4px var(--gold) inset}
-  #tFnRow .tInvBig .lbl{font-size:10px;color:var(--gold);bottom:-15px}
+  /* 背包按钮的"背包"标签放在按钮内部下方（之前 bottom:-15px 会被屏幕底/安全区遮挡显示不全），
+     现在改为 inset：紧贴按钮底部内侧，金色加粗，必定可见 */
+  #tFnRow .tInvBig .lbl{position:absolute;left:0;right:0;bottom:4px;
+                        font-size:10px;color:var(--gold);font-weight:bold;letter-spacing:1px;
+                        text-shadow:0 1px 2px #000;line-height:1;white-space:nowrap;text-align:center}
+  /* 同时让大背包按钮的图标上移一点，给 lbl 让位 */
+  #tFnRow .tInvBig{padding-bottom:10px;line-height:1}
   #tAuto.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
@@ -370,8 +378,8 @@
   body.mode-touch .orb.hp{left:calc(20px + var(--safe-l));bottom:calc(252px + var(--safe-b))}
   body.mode-touch .orb.mp{right:calc(20px + var(--safe-r));bottom:calc(252px + var(--safe-b))}
   body.mode-touch .orb .lbl{font-size:12px}
-  /* 经验条：放最下方（在功能键上方） */
-  body.mode-touch #skillbar{position:fixed;bottom:calc(60px + var(--safe-b));left:0;right:0;padding:0;
+  /* 经验条：放最下方（在功能键上方）—— tFnRow 上移后这里同步上移以避免重叠 */
+  body.mode-touch #skillbar{position:fixed;bottom:calc(78px + var(--safe-b));left:0;right:0;padding:0;
                             display:flex;flex-direction:column-reverse;align-items:center;gap:6px;pointer-events:none;z-index:8}
   /* 经验条横贯屏幕，紧贴功能键上方 */
   body.mode-touch #skillbar #expbar{width:96vw;max-width:96vw;height:8px;margin-bottom:0}
