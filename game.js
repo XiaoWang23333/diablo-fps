@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.28.0';
+const GAME_VERSION = 'v0.29.0';
 const GAME_BUILD   = '2026-06-06';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -1196,28 +1196,50 @@ function showPauseOverlay(){
   if(btn) btn.textContent = '▶ 继 续 游 戏';
   const slBar = document.getElementById('saveLoadBar');
   if(slBar) slBar.style.display='flex';
+  // 版本号仅在暂停界面显示
+  const vb = document.getElementById('verBadge');
+  if(vb) vb.style.display='block';
 }
 function showDeathOverlay(){
   overlay.style.display='flex';
   overlay.classList.remove('ov-pause');
   overlay.classList.add('ov-death');
+  // 死亡画面不显示版本号
+  const vb = document.getElementById('verBadge');
+  if(vb) vb.style.display='none';
   const h1 = overlay.querySelector('h1');
   if(h1) h1.textContent='💀 你 死 了';
   const info = document.getElementById('pauseInfo');
   if(info) info.innerHTML =
     `你倒在了血色荒野。<br/>等级：Lv.${player.level}　击杀：${player.killCount}　<b style="color:#ff8a8a">死亡：${player.deathCount||1}</b><br/><br/>`+
-    '<b style="color:#ff8a8a">点击屏幕（或手柄 Start）复活</b><br/>'+
-    '<span style="color:#888;font-size:11px">复活后将清场并获得 2 秒无敌；可点下方「读取存档」回到上次存档点，或点「打开背包」整理装备</span>'+
-    '<div style="margin-top:10px;display:flex;gap:10px;justify-content:center">'+
-    '  <button id="btnDeathInv" style="padding:8px 20px;font-size:13px;border:1px solid var(--gold);background:#241c10;color:var(--gold);border-radius:4px;cursor:pointer;letter-spacing:2px">🎒 打开背包</button>'+
+    '<span style="color:#888;font-size:11px">点击「复活」清场重生（2 秒无敌）；或先打开背包整理装备，或读取上次存档</span>'+
+    '<div style="margin-top:14px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'+
+    '  <button id="btnDeathRevive" style="padding:10px 28px;font-size:15px;border:2px solid #ff8a8a;background:#3a1414;color:#ffd0d0;border-radius:4px;cursor:pointer;letter-spacing:3px;font-weight:bold;box-shadow:0 0 12px rgba(255,80,80,.6)">✦ 复 活 ✦</button>'+
+    '  <button id="btnDeathInv" style="padding:10px 22px;font-size:13px;border:1px solid var(--gold);background:#241c10;color:var(--gold);border-radius:4px;cursor:pointer;letter-spacing:2px">🎒 打开背包</button>'+
     '</div>';
   // 死亡时仍显示存读档按钮（玩家可以选择从上次存档复活）
   const slBar = document.getElementById('saveLoadBar');
   if(slBar) slBar.style.display='flex';
+
+  // 绑定「复活」按钮
+  const rv = document.getElementById('btnDeathRevive');
+  if(rv){
+    const doRevive = (e)=>{
+      e && e.stopPropagation && e.stopPropagation();
+      e && e.preventDefault && e.preventDefault();
+      respawn();
+    };
+    rv.addEventListener('click', doRevive);
+    rv.addEventListener('touchstart', doRevive, {passive:false});
+  }
+
   // 绑定背包按钮（每次重建）
   const di = document.getElementById('btnDeathInv');
   if(di){
     const open = (e)=>{ e && e.stopPropagation && e.stopPropagation(); e && e.preventDefault && e.preventDefault();
+      // 关闭可能残留的镶嵌/孔位面板，避免叠加 UI 干扰
+      if(typeof closeGemUsePanel==='function') closeGemUsePanel();
+      if(typeof closeSocketPanel==='function') closeSocketPanel();
       // 临时隐藏死亡 overlay 让出 z-index，背包关闭时再恢复
       overlay.style.display = 'none';
       // 背包面板需在 overlay 之上：临时拉高 z-index
@@ -1232,6 +1254,9 @@ function showDeathOverlay(){
         const restore = (ev)=>{
           ev && ev.stopPropagation && ev.stopPropagation();
           ev && ev.preventDefault && ev.preventDefault();
+          // 同时关闭可能在背包内打开的子面板
+          if(typeof closeGemUsePanel==='function') closeGemUsePanel();
+          if(typeof closeSocketPanel==='function') closeSocketPanel();
           invPanel.style.display='none';
           invPanel.style.zIndex='';
           if(player._dead){
@@ -1256,6 +1281,9 @@ function clearOverlayState(){
   // 恢复确定按钮的初始文案（开始游戏前显示）
   const btn = document.getElementById('btnConfirmMode');
   if(btn) btn.textContent = '✓ 确 定 · 开 始 游 戏';
+  // 离开暂停界面时隐藏版本号
+  const vb = document.getElementById('verBadge');
+  if(vb) vb.style.display='none';
 }
 
 
@@ -1515,7 +1543,7 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
 
 
 function startOrResumeGame(){
-  // 死亡画面交给 overlay.onclick 处理复活，不要走这里
+  // 死亡画面有自己的「复活」按钮，不要走这里
   if(player._dead){ console.log('[start] player dead, ignore'); return; }
   if(_starting){ console.log('[start] already starting, ignore'); return; }
   _starting = true;
@@ -1550,7 +1578,7 @@ function startOrResumeGame(){
 // 开始游戏：必须点击"确定"按钮（或按 Space/Enter）后才进入
 // 这样玩家有机会先选择操作模式再开始，避免误触
 function _overlayHandler(ev){
-  if(player._dead) return; // 死亡画面用 overlay.onclick
+  if(player._dead) return; // 死亡画面用「复活」按钮
   startOrResumeGame();
 }
 // 确定按钮（开始菜单核心入口）
@@ -1813,11 +1841,133 @@ function useExpTome(idx){
     expBar.classList.add('expFlash');
     setTimeout(()=>expBar.classList.remove('expFlash'), 1400);
   }
+  // 临时弹出浮动经验条 + 数字滚动动画（无论是否在战斗界面都能看清涨了多少）
+  spawnExpGainPopup(gain);
   gainExp(gain);
   toast(`📖 研读经验之书，获得 ${gain} 经验`);
   rebuildInv();
   refreshInfo();
   return true;
+}
+
+// 经验书使用时的动画浮窗：屏幕中上居中弹出一条加粗经验条，
+// 数字从 0 滚动到 gain，金边脉冲，2.4s 后淡出
+function spawnExpGainPopup(gain){
+  // 防止快速连续使用导致多个浮窗叠加：先移除旧的
+  const old = document.getElementById('expGainPopup');
+  if(old) old.remove();
+
+  const wrap = document.createElement('div');
+  wrap.id = 'expGainPopup';
+  wrap.style.cssText =
+    'position:fixed;left:50%;top:22%;transform:translate(-50%,0) scale(.85);z-index:55;pointer-events:none;'+
+    'background:rgba(0,0,0,.82);border:2px solid var(--gold);border-radius:8px;padding:14px 24px 16px;'+
+    'min-width:260px;max-width:80vw;text-align:center;'+
+    'box-shadow:0 0 24px var(--gold),0 0 60px rgba(0,0,0,.6);'+
+    'transition:opacity .3s,transform .35s cubic-bezier(.3,1.6,.5,1);opacity:0';
+
+  // 标题
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:14px;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:8px';
+  title.textContent = '📖 研读经验之书';
+  wrap.appendChild(title);
+
+  // 数字（滚动）
+  const numEl = document.createElement('div');
+  numEl.style.cssText = 'font-size:26px;color:#fff5b8;font-weight:bold;letter-spacing:2px;margin-bottom:8px;text-shadow:0 0 8px var(--gold)';
+  numEl.textContent = '+0 EXP';
+  wrap.appendChild(numEl);
+
+  // 经验条（动画填充，从当前进度填到目标进度，跨级时分段处理）
+  const barOuter = document.createElement('div');
+  barOuter.style.cssText = 'width:100%;height:14px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden;position:relative';
+  const barInner = document.createElement('div');
+  barInner.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg,#e8c45a,#fff5b8);box-shadow:0 0 6px #e8c45a inset;transition:width .35s cubic-bezier(.3,1.5,.6,1)';
+  barOuter.appendChild(barInner);
+  wrap.appendChild(barOuter);
+
+  // 等级提示（升级时切换）
+  const lvEl = document.createElement('div');
+  lvEl.style.cssText = 'font-size:11px;color:#aaa;letter-spacing:2px;margin-top:6px';
+  lvEl.textContent = `Lv.${player.level}　${player.exp}/${player.expNeed}`;
+  wrap.appendChild(lvEl);
+
+  document.body.appendChild(wrap);
+  // 入场动画
+  requestAnimationFrame(()=>{ wrap.style.opacity='1'; wrap.style.transform='translate(-50%,0) scale(1)'; });
+
+  // 起始状态：使用前的等级 / 经验 / 经验需求；终止状态：调用 gainExp 后由外部刷新
+  const startLevel = player.level;
+  const startExp   = player.exp;
+  const startNeed  = player.expNeed;
+  // 立即把起点画上
+  barInner.style.width = (startExp/startNeed*100) + '%';
+
+  // 数字从 0 滚动到 gain
+  const dur = 700;
+  const t0 = performance.now();
+  function tickNum(){
+    const t = Math.min(1, (performance.now()-t0)/dur);
+    // easeOutCubic
+    const e = 1 - Math.pow(1-t, 3);
+    numEl.textContent = `+${Math.round(gain*e)} EXP`;
+    if(t<1) requestAnimationFrame(tickNum);
+    else numEl.textContent = `+${gain} EXP`;
+  }
+  requestAnimationFrame(tickNum);
+
+  // 进度条动画：分阶段——先把当前级填满到 100%，若还有剩余就清零再填到下一级位置，重复直到本次 gain 用完
+  // 注意：此函数在 gainExp 之前调用，所以这里独立模拟一份本地进度推演（不影响 player）
+  let simExp  = startExp;
+  let simNeed = startNeed;
+  let simLv   = startLevel;
+  let leveled = false;
+  let remain  = gain;
+  let stepDelay = 60; // 入场后稍等再开始动
+  function step(){
+    if(remain <= 0){
+      // 完成：刷新提示信息（同步到玩家最终状态，应已被 gainExp 更新）
+      lvEl.textContent = `Lv.${player.level}　${player.exp}/${player.expNeed}`;
+      return;
+    }
+    const room = simNeed - simExp;
+    if(remain >= room){
+      // 这一级会涨满 → 走到 100% → 升级
+      simExp = simNeed;
+      remain -= room;
+      barInner.style.width = '100%';
+      setTimeout(()=>{
+        // 升级：重置进度条、Lv+1
+        simLv++;
+        simExp = 0;
+        simNeed = Math.floor(50*Math.pow(1.25, simLv-1));
+        leveled = true;
+        barInner.style.transition = 'none';
+        barInner.style.width = '0%';
+        lvEl.textContent = `Lv.${simLv}　0/${simNeed}　★ 升级！`;
+        lvEl.style.color = '#ffd76a';
+        // 强制 reflow 然后恢复过渡
+        void barInner.offsetWidth;
+        barInner.style.transition = 'width .35s cubic-bezier(.3,1.5,.6,1)';
+        setTimeout(step, 180);
+      }, 380);
+    } else {
+      // 不会涨满：直接补到目标位置
+      simExp += remain;
+      remain = 0;
+      barInner.style.width = (simExp/simNeed*100) + '%';
+      setTimeout(()=>{
+        lvEl.textContent = `Lv.${simLv}　${simExp}/${simNeed}` + (leveled ? '　★' : '');
+        if(leveled) lvEl.style.color = '#ffd76a';
+        step();
+      }, 380);
+    }
+  }
+  setTimeout(step, stepDelay);
+
+  // 出场
+  setTimeout(()=>{ wrap.style.opacity='0'; wrap.style.transform='translate(-50%,-20px) scale(.96)'; }, 2400);
+  setTimeout(()=>{ wrap.remove(); }, 2800);
 }
 
 // ====== 血瓶 / 蓝瓶 ======
@@ -3785,19 +3935,20 @@ function gameOver(){
   Audio.death();
   gamePaused = true;              // 死亡即暂停，敌方投射物 / AI 全部冻结
   controls.unlock();
-  // 关掉背包，避免叠加 UI
+  // 关掉所有可能残留的子面板，避免叠加 UI（旧 bug：死后点"继续"会弹出宝石镶嵌界面，
+  // 因为玩家死前正好打开了 gemUsePanel/socketPanel 而它们没有被关闭）
   if(invPanel && invPanel.style.display==='block'){
     invPanel.style.display='none';
   }
+  if(typeof closeGemUsePanel==='function') closeGemUsePanel();
+  if(typeof closeSocketPanel==='function') closeSocketPanel();
+  const fp = document.getElementById('fusePanel');
+  if(fp) fp.style.display='none';
   showDeathOverlay();
 
-  // 用 onclick 替代 addEventListener，避免事件残留
-  overlay.onclick = (ev)=>{
-    // 点击到按钮（保存/读档/确定/任何 button）时，不触发复活
-    if(ev && ev.target && (ev.target.closest && ev.target.closest('button'))) return;
-    overlay.onclick = null;
-    respawn();
-  };
+  // 旧版"点屏幕复活"已废弃：改为死亡 overlay 上的显式「复活」按钮
+  // （这里清理掉可能残留的 onclick，防止意外触发）
+  overlay.onclick = null;
 }
 
 function respawn(){
@@ -6057,8 +6208,10 @@ function update(dt){
         // 开始菜单 / 暂停菜单可见 → Start 进入游戏
         startOrResumeGame();
       } else if(player._dead){
-        // 死亡画面下：等同于点击复活
-        if(overlay.onclick){ const fn=overlay.onclick; overlay.onclick=null; fn(); }
+        // 死亡画面下：等同于点击「复活」按钮
+        const rv = document.getElementById('btnDeathRevive');
+        if(rv) rv.click();
+        else respawn();
       } else {
         // 游戏运行中按 Start → 暂停游戏 + 弹暂停菜单
         gamePaused = true;
@@ -6126,7 +6279,7 @@ function update(dt){
     const e = controls._euler;
     e.setFromQuaternion(camera.quaternion);
     e.y -= touchInput.rx * 1.6 * dt;     // X 灵敏度 2.6 → 1.6
-    e.x -= touchInput.ry * 0.7 * dt;     // Y 灵敏度 1.0 → 0.7
+    e.x -= touchInput.ry * 0.4 * dt;     // Y 灵敏度 1.0 → 0.7 → 0.4（避免上下乱晃 / 滑出舒适区）
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
@@ -6623,7 +6776,10 @@ function loop(){
       const invOpen = invPanel && invPanel.style.display==='block';
       if(padIn){
         if(padIn.start){
-          if(player._dead && overlay.onclick){ const fn=overlay.onclick; overlay.onclick=null; fn(); }
+          if(player._dead){
+            const rv = document.getElementById('btnDeathRevive');
+            if(rv) rv.click(); else respawn();
+          }
           else if(overlay && overlay.style.display!=='none'){
             // 开始菜单 / 暂停菜单 → Start 进入游戏
             startOrResumeGame();
