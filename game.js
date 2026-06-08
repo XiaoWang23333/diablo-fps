@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.30.0';
-const GAME_BUILD   = '2026-06-06';
+const GAME_VERSION = 'v0.31.0';
+const GAME_BUILD   = '2026-06-08';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -590,11 +590,12 @@ viewWeaponRig.add(viewWeaponHand);
 // 默认放在右下，距相机 0.5m
 viewWeaponRig.position.set(0.32, -0.32, -0.55);
 camera.add(viewWeaponRig);
-// 触屏模式：屏幕底部被功能键占用较多，武器整体往左挪一点更自然
+// 触屏模式：屏幕底部被功能键占用较多，武器整体居中显示更自然（之前向左偏移会遮挡左下技能）
 function adjustViewWeaponForMode(){
   if(!viewWeaponRig) return;
   if(InputMode && InputMode.current==='touch'){
-    viewWeaponRig.position.set(-0.05, -0.30, -0.55);
+    // 居中略下，靠近屏幕底部中线
+    viewWeaponRig.position.set(0, -0.34, -0.55);
   } else {
     viewWeaponRig.position.set(0.32, -0.32, -0.55);
   }
@@ -750,6 +751,10 @@ function rebuildViewWeapon(){
     viewWeaponRig.position.set(0.32, -0.30, -0.55);
   }
   viewWeaponHand.add(_vwMesh);
+  // 手机模式：统一覆盖 X 居中（各武器姿态保留，但水平位置改 0）
+  if(InputMode && InputMode.current==='touch'){
+    viewWeaponRig.position.x = 0;
+  }
 }
 // 触发武器动作动画（在 castSkill 成功后调用）
 function playViewWeaponAnim(skillType, skillKey){
@@ -841,6 +846,11 @@ function syncToggleButtons(){
   if(mb){ mb.textContent='🔊 音效：'+(Audio.isMuted()?'关':'开'); mb.classList.toggle('on',!Audio.isMuted()); }
   const kb=document.getElementById('btnSkillMode');
   if(kb){ kb.textContent='✨ 技能：'+(settings.autoSkill?'自动':'手动'); kb.classList.toggle('on',settings.autoSkill); }
+  // 触屏「奔跑」按钮（取代了原「跳」按钮）的开关态同步
+  const tj=document.getElementById('tJump');
+  if(tj){ tj.classList.toggle('on', settings.sprintOn); }
+  const ta=document.getElementById('tAuto');
+  if(ta){ ta.classList.toggle('on', settings.autoPlay); }
 }
 function toggleSprint(){
   settings.sprintOn=!settings.sprintOn; syncToggleButtons();
@@ -1191,7 +1201,10 @@ function showPauseOverlay(){
   if(info) info.innerHTML =
     '游戏已暂停。<br/>点击 <b style="color:var(--gold)">「继续游戏」</b> 按钮（手柄按 <span class="key">Start</span>）恢复<br/>'+
     '按 <span class="key">ESC</span> 释放鼠标 · 按 <span class="key">I</span> 打开背包<br/>'+
-    '<span style="color:#888;font-size:11px">可在下方保存 / 读取进度</span>';
+    '<span style="color:#888;font-size:11px">可在下方保存 / 读取进度</span>'+
+    '<div style="margin-top:12px;display:flex;gap:10px;justify-content:center">'+
+    '  <button id="btnPauseInv" style="padding:9px 22px;font-size:13px;border:1px solid var(--gold);background:#241c10;color:var(--gold);border-radius:4px;cursor:pointer;letter-spacing:2px">🎒 打开背包</button>'+
+    '</div>';
   const btn = document.getElementById('btnConfirmMode');
   if(btn) btn.textContent = '▶ 继 续 游 戏';
   const slBar = document.getElementById('saveLoadBar');
@@ -1199,6 +1212,54 @@ function showPauseOverlay(){
   // 版本号仅在暂停界面显示
   const vb = document.getElementById('verBadge');
   if(vb) vb.style.display='block';
+  // 绑定「打开背包」按钮：点击后隐藏 overlay、打开背包；关闭背包时若仍处于暂停态则恢复 overlay
+  const pi = document.getElementById('btnPauseInv');
+  if(pi){
+    const open = (e)=>{
+      e && e.stopPropagation && e.stopPropagation();
+      e && e.preventDefault && e.preventDefault();
+      // 隐藏暂停 overlay 让位给背包；保持 gamePaused = true
+      overlay.style.display = 'none';
+      // 背包面板需要在所有面板之上：临时拉高 z-index，关闭时恢复
+      invPanel.style.zIndex = 60;
+      tipEl.style.zIndex = 70;
+      tipCmpEl.style.zIndex = 70;
+      const gup = document.getElementById('gemUsePanel'); if(gup) gup.style.zIndex = 65;
+      const sop = document.getElementById('socketPanel'); if(sop) sop.style.zIndex = 65;
+      const fup = document.getElementById('fusePanel');   if(fup) fup.style.zIndex = 65;
+      invPanel.style.display='block';
+      _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
+      if(typeof rebuildInv==='function') rebuildInv();
+      Audio.uiOpen && Audio.uiOpen();
+      // 监听背包关闭：恢复暂停 overlay
+      const invCb = document.getElementById('invCloseBtn');
+      if(invCb){
+        const restore = (ev)=>{
+          ev && ev.stopPropagation && ev.stopPropagation();
+          ev && ev.preventDefault && ev.preventDefault();
+          if(typeof closeGemUsePanel==='function') closeGemUsePanel();
+          if(typeof closeSocketPanel==='function') closeSocketPanel();
+          invPanel.style.display='none';
+          invPanel.style.zIndex='';
+          tipEl.style.zIndex='';
+          tipCmpEl.style.zIndex='';
+          if(gup) gup.style.zIndex='';
+          if(sop) sop.style.zIndex='';
+          if(fup) fup.style.zIndex='';
+          // 仍处于暂停状态（玩家没死）→ 重新弹出暂停 overlay
+          if(gamePaused && !player._dead){
+            showPauseOverlay();
+          }
+          invCb.removeEventListener('click', restore);
+          invCb.removeEventListener('touchstart', restore);
+        };
+        invCb.addEventListener('click', restore, {once:true});
+        invCb.addEventListener('touchstart', restore, {passive:false, once:true});
+      }
+    };
+    pi.addEventListener('click', open);
+    pi.addEventListener('touchstart', open, {passive:false});
+  }
 }
 function showDeathOverlay(){
   overlay.style.display='flex';
@@ -1437,13 +1498,12 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
     if(!controls.isLocked) return;
     for(const t of e.changedTouches){
       if(t.identifier!==lookId) continue;
-      const dx = t.clientX - lx0, dy = t.clientY - ly0;
+      const dx = t.clientX - lx0; /* dy 不再使用：手机模式锁定 Y 轴 */
       lx0 = t.clientX; ly0 = t.clientY;
       const eu = controls._euler;
       eu.setFromQuaternion(camera.quaternion);
       eu.y -= dx * 0.0035;
-      eu.x -= dy * 0.0018;       // Y 轴灵敏度调低
-      eu.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, eu.x));
+      // 不再调整 eu.x：手机模式下视角始终保持水平
       camera.quaternion.setFromEuler(eu);
     }
   }, {passive:true});
@@ -1464,9 +1524,11 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
     el.addEventListener('click', (e)=>{ e.stopPropagation(); });
   };
   bind('tJump', ()=>{
-    if(controls.isLocked && player.onGround && !player._dead){
-      player.vel.y = 6; player.onGround = false;
-    }
+    // 手机模式下原「跳」改为「奔跑」开关——跳跃在大多数情况下用不到，奔跑更实用
+    if(typeof toggleSprint==='function') toggleSprint();
+    // 同步按钮的高亮态（与 #tAuto 一样的视觉）
+    const btn = document.getElementById('tJump');
+    if(btn) btn.classList.toggle('on', !!(settings && settings.sprintOn));
   });
   bind('tHp',   ()=>{ if(typeof quickDrinkHp==='function') quickDrinkHp(); });
   bind('tMp',   ()=>{ if(typeof quickDrinkMp==='function') quickDrinkMp(); });
@@ -3285,7 +3347,14 @@ function showVictoryPanel(){
   const panel = document.getElementById('victoryPanel');
   const sub = document.getElementById('victorySub');
   if(sub){
-    sub.innerHTML = `你击败了远古霸主，征服了 <b style="color:var(--gold)">难度 ${difficulty}</b> 的血色荒野<br/>等级 Lv.${player.level}　击杀 ${player.killCount}　难度 ${difficulty}`;
+    const dc = player.deathCount || 0;
+    // 死亡 0 次时给金色"无瑕通关"标记，>0 次按数量显示红色
+    const dcLabel = dc===0
+      ? `<span style="color:#ffd76a">死亡 0 次　★ 无瑕通关</span>`
+      : `<span style="color:#ff8a8a">死亡 ${dc} 次</span>`;
+    sub.innerHTML =
+      `你击败了远古霸主，征服了 <b style="color:var(--gold)">难度 ${difficulty}</b> 的血色荒野<br/>`+
+      `等级 Lv.${player.level}　击杀 ${player.killCount}　${dcLabel}`;
   }
   if(panel) panel.style.display = 'block';
   Audio.levelUp && Audio.levelUp();
@@ -4588,21 +4657,29 @@ function showItemTipWithActions(it, idx, x, y){
   actEl.id = 'tipActions';
   // 根据物品类型决定按钮
   const buttons = [];
+  // 优先按"特殊用法"决定主要操作；但只要 it.slot 存在（装备），都强制追加「装备/替换」按钮，
+  // 确保任何装备打开对比界面时都能看到替换入口（用户反馈"有时没出现替换按钮"的根因防护）
+  let mainHandled = false;
   if(it.isGem){
     buttons.push({lbl:'镶嵌', fn:()=>{ hideTip(); useGemFromInv(idx); }});
+    mainHandled = true;
   } else if(it.special==='hpPotion'){
     buttons.push({lbl:'喝下', fn:()=>{ useHpPotion(idx); hideTip(); }});
+    mainHandled = true;
   } else if(it.special==='mpPotion'){
     buttons.push({lbl:'喝下', fn:()=>{ useMpPotion(idx); hideTip(); }});
+    mainHandled = true;
   } else if(it.special==='expTome'){
     buttons.push({lbl:'研读', fn:()=>{ useExpTome(idx); hideTip(); }});
+    mainHandled = true;
   } else if(it.special==='bagExpand'){
     buttons.push({lbl:'使用', fn:()=>{ useBagExpandScroll(idx); hideTip(); }});
-  } else if(it.slot){
-    // 装备类（凡是有 slot 字段就算装备：盔甲/武器/戒指/头盔）
-    // 旧逻辑要求 it.quality 才显示装备按钮，但合成产物 / 老存档可能 quality 为空，导致按钮消失
+    mainHandled = true;
+  }
+  // 装备：只要有 slot 字段，就追加替换/装备按钮（与上面的 special 分支共存）
+  if(it.slot && !it.isGem){
     const cur = player.equip[it.slot];
-    buttons.push({lbl: cur ? '替换装备' : '装 备', fn:()=>{
+    buttons.push({lbl: cur ? '替换装备' : '装 备', cls:'primary', fn:()=>{
       const c = player.equip[it.slot];
       player.equip[it.slot] = it;
       player.inv.splice(idx,1);
@@ -4611,11 +4688,10 @@ function showItemTipWithActions(it, idx, x, y){
       if(typeof Quests!=='undefined' && it.quality){ Quests.onEvent('equip', {qualityKey: it.quality.key}); }
       hideTip();
     }});
-    // 装备且有空孔位：补充"镶嵌宝石"快捷按钮
-    if((it.sockets||0) > 0){
-      buttons.push({lbl:'打开孔位', fn:()=>{ hideTip(); if(typeof openSocketPanel==='function') openSocketPanel(); }});
-    }
+    mainHandled = true;
   }
+  // 完全无识别的物品（极少见）：避免 buttons 只有"丢弃/关闭"，给个保险
+  void mainHandled;
   buttons.push({lbl:'丢弃', cls:'danger', fn:()=>{ dropFromInv(idx); hideTip(); }});
   buttons.push({lbl:'关闭', fn:()=>{ hideTip(); }});
   buttons.forEach(b=>{
@@ -6093,6 +6169,9 @@ player.equip.weapon=(()=>{
   return it;
 })();
 applyEquipStats();
+// 开场赠送：1 瓶血 + 1 瓶蓝（手机模式新手开局减少卡死风险，PC/手柄玩家也用得上）
+player.inv.push(makeHpPotion(0));
+player.inv.push(makeMpPotion(0));
 // 初始化任务系统（必须在 applyEquipStats 之后，确保 player 已就绪）
 Quests.init();
 renderProgress();        // 初始化关卡进度面板
@@ -6306,13 +6385,12 @@ function update(dt){
     e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
     camera.quaternion.setFromEuler(e);
   }
-  // 触屏右摇杆驱动视角（Y 轴灵敏度调低，避免上下乱晃）
-  if(InputMode.current==='touch' && controls.isLocked && (touchInput.rx || touchInput.ry)){
+  // 触屏右摇杆驱动视角（已移除 Y 轴：手机模式下玩家不再上下调整视角，避免抬头看天/低头看地的迷失感）
+  if(InputMode.current==='touch' && controls.isLocked && touchInput.rx){
     const e = controls._euler;
     e.setFromQuaternion(camera.quaternion);
-    e.y -= touchInput.rx * 1.6 * dt;     // X 灵敏度 2.6 → 1.6
-    e.x -= touchInput.ry * 0.4 * dt;     // Y 灵敏度 1.0 → 0.7 → 0.4（避免上下乱晃 / 滑出舒适区）
-    e.x = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, e.x));
+    e.y -= touchInput.rx * 1.6 * dt;     // 仅水平转向
+    // e.x 保持不变（水平视角锁定）
     camera.quaternion.setFromEuler(e);
   }
 
@@ -6378,9 +6456,22 @@ function update(dt){
     for(const i of order){
       const s=player.skills[i];if(!s||s.cdLeft>0||player.mp<s.mp)continue;
       // 防御性技能（治疗/护盾/铁壁姿态）不锁敌，由 castSkill 内部按生命/状态条件自行判定
-      const need=!['nova','heal','shield','haste'].includes(s.type);
-      // 180° 自动锁敌：仅前方半圆的敌人会被锁定（nova 全向 AOE 除外）
-      const t=findBestTarget(s.range,false);
+      // 注意：nova 是范围攻击技能（不是防御技能），必须有敌人在范围内才释放，否则空放浪费蓝
+      const need=!['heal','shield','haste'].includes(s.type);
+      let t = null;
+      if(need){
+        if(s.type==='nova'){
+          // 新星是 360° 范围 AOE：全向检测，只要范围内有任意敌人即视为命中目标
+          const cam = controls.getObject().position;
+          for(const e of enemies){
+            if(e.hp<=0) continue;
+            if(e.mesh.position.distanceTo(cam) <= s.range){ t = e; break; }
+          }
+        } else {
+          // 其他技能：仅锁定玩家前方 180° 范围内的敌人
+          t = findBestTarget(s.range, false);
+        }
+      }
       if(need&&!t)continue;
       if(castSkill(s)){
         s.cdLeft=s.cd/atkSpd;

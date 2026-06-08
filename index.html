@@ -345,13 +345,15 @@
                    background:radial-gradient(circle,#3a2a14 0%,#15110b 80%);
                    box-shadow:0 0 14px rgba(232,196,90,.55), 0 0 4px var(--gold) inset}
   /* 背包按钮的"背包"标签放在按钮内部下方（之前 bottom:-15px 会被屏幕底/安全区遮挡显示不全），
-     现在改为 inset：紧贴按钮底部内侧，金色加粗，必定可见 */
-  #tFnRow .tInvBig .lbl{position:absolute;left:0;right:0;bottom:4px;
+     现在改为 inset：紧贴按钮底部内侧，金色加粗，必定可见。
+     关键：必须 transform:none 覆盖通用 .tBtn .lbl 的 translateX(-50%)，否则会偏左 */
+  #tFnRow .tInvBig .lbl{position:absolute;left:0;right:0;bottom:4px;transform:none;
                         font-size:10px;color:var(--gold);font-weight:bold;letter-spacing:1px;
-                        text-shadow:0 1px 2px #000;line-height:1;white-space:nowrap;text-align:center}
+                        text-shadow:0 1px 2px #000;line-height:1;white-space:nowrap;text-align:center;
+                        display:block;width:auto}
   /* 同时让大背包按钮的图标上移一点，给 lbl 让位 */
   #tFnRow .tInvBig{padding-bottom:10px;line-height:1}
-  #tAuto.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
+  #tAuto.on, #tJump.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
   /* 触屏模式：HUD 紧凑、隐藏侧栏式信息 */
@@ -427,6 +429,10 @@
   #tipActions button:hover{background:#3a2a14}
   #tipActions button.danger{border-color:#ff7070;color:#ff8a8a}
   #tipActions button.danger:hover{background:#3a1414}
+  #tipActions button.primary{background:linear-gradient(180deg,#3a2a14,#241c10);
+    border-color:var(--gold);color:#ffd76a;font-weight:bold;
+    box-shadow:0 0 10px rgba(232,196,90,.5);padding:8px 16px}
+  #tipActions button.primary:hover{filter:brightness(1.2)}
   /* 触屏模式 tip 允许接收点击（按钮要可点）；其他模式保持鼠标穿透 */
   body.mode-touch .tip{pointer-events:auto}
   /* 背包小红点：替代 NEW 标签 */
@@ -568,7 +574,7 @@
     <button id="tQuest" class="tBtn">📜<span class="lbl">任务</span></button>
     <button id="tInv"   class="tBtn tInvBig">🎒<span class="lbl">背包</span></button>
     <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
-    <button id="tJump"  class="tBtn">↑<span class="lbl">跳</span></button>
+    <button id="tJump"  class="tBtn">🏃<span class="lbl">奔跑</span></button>
   </div>
 </div>
 
