@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.4';
+const GAME_VERSION = 'v0.32.5';
 const GAME_BUILD   = '2026-06-10';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -6013,13 +6013,24 @@ function rebuildInv(){
                   `<div class="qLabel" style="color:${it.quality.color}">${it.quality.name}</div>`+
                   newTag + upTag;
       d.addEventListener('mouseenter',e=>{
+        // 触屏模式下 iOS 会在 touchend 后合成派发 mouse 事件序列（mouseover/move/leave），
+        // 这些"假"事件会触发 showTip/hideTip 与 click 路径上的 showItemTipWithActions 抢夺 actEl，
+        // 表现就是用户反馈的"按钮时有时无"。手机模式下完全屏蔽鼠标事件，仅靠 click 显示 tip。
+        if(InputMode && InputMode.current==='touch') return;
         if(gemModalOpen()) return;   // 镶嵌界面打开时不弹背包 tip
         _hoverIdx=i;
         if(it.isNew){ it.isNew=false; const tag=d.querySelector('.newTag'); if(tag) tag.remove(); }
         showTip(it,_mouseX,_mouseY);
       });
-      d.addEventListener('mousemove',e=>{if(gemModalOpen())return;_hoverIdx=i;showTip(it,e.clientX,e.clientY);});
-      d.addEventListener('mouseleave',()=>{if(_hoverIdx===i){_hoverIdx=-1;hideTip();}});
+      d.addEventListener('mousemove',e=>{
+        if(InputMode && InputMode.current==='touch') return;
+        if(gemModalOpen()) return;
+        _hoverIdx=i; showTip(it,e.clientX,e.clientY);
+      });
+      d.addEventListener('mouseleave',()=>{
+        if(InputMode && InputMode.current==='touch') return;
+        if(_hoverIdx===i){_hoverIdx=-1;hideTip();}
+      });
       // 左键：装备/交换（宝石不能装备，只能镶嵌）
       d.addEventListener('click',(ev)=>{
         // 镶嵌/孔位面板打开时，禁止操作背包，必须先关闭镶嵌界面
