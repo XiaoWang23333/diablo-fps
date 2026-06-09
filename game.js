@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.3';
-const GAME_BUILD   = '2026-06-09';
+const GAME_VERSION = 'v0.32.4';
+const GAME_BUILD   = '2026-06-10';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -4524,19 +4524,24 @@ function showTip(it,x,y){
 
   // ============ 触屏模式：居中模态布局，主 tip 在上，对比 tip 在下 ============
   if(InputMode && InputMode.current==='touch'){
-    // 主 tip：居中、宽度 86vw、最大 360px；高度自适应不滚动（按钮 sticky 兜底）
+    // 关键决策：tipEl 自身不滚动；用其内部一个 div.tipScroll 做滚动。
+    // 这样 fixed 钉底按钮区的渲染不依赖 tipEl 是否在滚动，规避 iOS 渲染 bug。
     const w = Math.min(360, innerWidth - 24);
     tipEl.style.width = w + 'px';
     tipEl.style.maxWidth = w + 'px';
-    tipEl.style.maxHeight = '70vh';
-    tipEl.style.overflowY = 'auto';
+    tipEl.style.maxHeight = '';
+    tipEl.style.overflowY = 'hidden';
     tipEl.style.left = ((innerWidth - w)/2) + 'px';
-    tipEl.style.top  = '8vh';
-    // 对比当前同槽装备：直接放在主 tip 里，下方折叠区
+    tipEl.style.top  = '4vh';
+    tipEl.style.bottom = '100px';   // 留 100px 给 fixed 按钮区
+    // 把 itemTipHtml 内容包进可滚动子 div（tipEl 自身不滚）
+    const innerHtml = itemTipHtml(it);
+    tipEl.innerHTML = `<div class="tipScroll" style="height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px">${innerHtml}</div>`;
+    const scrollBox = tipEl.querySelector('.tipScroll');
+    // 对比当前同槽装备：拼到 tipScroll 末尾
     const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
       const better = itemScore(it) > itemScore(cur);
-      // 醒目实线分隔条 + 「当前装备」标题（带颜色 chip）
       const html =
         `<div style="margin:10px -10px 8px;padding:6px 10px;`+
         `background:linear-gradient(90deg,transparent,${better?'rgba(123,217,106,.18)':'rgba(255,112,112,.18)'},transparent);`+
@@ -4546,7 +4551,7 @@ function showTip(it,x,y){
         `▼ 当前已装备 ▼  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'}`+
         `</div>`+
         itemTipHtml(cur);
-      tipEl.innerHTML += html;
+      if(scrollBox) scrollBox.innerHTML += html;
     }
     tipCmpEl.style.display='none';
     return;
@@ -4618,10 +4623,11 @@ function showTip(it,x,y){
 }
 function hideTip(){
   tipEl.style.display='none'; tipCmpEl.style.display='none';
-  // 触屏模式下 tip 用了 inline width/maxWidth，下次显示前清掉
+  // 触屏模式下 tip 用了 inline 多种样式，下次显示前清掉
   tipEl.style.width=''; tipEl.style.maxWidth=''; tipEl.style.maxHeight=''; tipEl.style.overflowY='';
+  tipEl.style.bottom=''; tipEl.style.webkitOverflowScrolling=''; tipEl.style.transform='';
   tipCmpEl.style.width=''; tipCmpEl.style.maxWidth=''; tipCmpEl.style.maxHeight=''; tipCmpEl.style.overflowY='';
-  // 清理可能挂在 body 上的独立 tipActions（触屏模式下挂出 tipEl 避免被 overflow/stacking 裁剪）
+  // 清理可能挂在 body / invPanel 上的独立 tipActions（触屏模式下挂出 tipEl 避免被 overflow/stacking 裁剪）
   const ext = document.getElementById('tipActions');
   if(ext) ext.remove();
 }
@@ -4684,18 +4690,24 @@ function showItemTipWithActions(it, idx, x, y){
     btn.addEventListener('touchstart', stop, {passive:false});
     actEl.appendChild(btn);
   });
-  // 触屏模式：actEl 挂到 body，避免被 tipEl 的 overflow:auto / stacking context 裁掉
-  // （之前 sticky/fixed 钉底在某些移动浏览器都失效，导致按钮看不见）
+  // 触屏模式：actEl 挂到 invPanel（永远稳定显示的容器），避免 iOS 滚动 tipEl 时 fixed 兄弟节点被隐藏的渲染 bug
   // 桌面/手柄模式：保持挂在 tipEl 内（位置随 tip 浮动，体验一致）
   if(InputMode && InputMode.current==='touch'){
-    // 关键：直接用内联样式兜底（避免 CSS 选择器优先级 / 加载顺序意外失效）
+    // 内联样式：fixed 钉到屏幕底部 + 顶级 z-index + GPU 层避免渲染 bug
     actEl.style.cssText =
-      'position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom, 0px));'+
-      'margin:0;padding:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;'+
-      'background:rgba(20,16,11,.96);border:2px solid #e8c45a;border-radius:8px;'+
-      'box-shadow:0 0 24px rgba(232,196,90,.55), 0 0 60px rgba(0,0,0,.7);'+
-      'z-index:9999;pointer-events:auto';
-    document.body.appendChild(actEl);
+      'position:fixed;left:8px;right:8px;bottom:16px;'+
+      'margin:0;padding:12px 10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;'+
+      'background:rgba(20,16,11,.98);border:2px solid #e8c45a;border-radius:8px;'+
+      'box-shadow:0 0 24px rgba(232,196,90,.6), 0 0 60px rgba(0,0,0,.85);'+
+      'z-index:99999;pointer-events:auto;'+
+      'transform:translateZ(0);will-change:transform;'+
+      '-webkit-backface-visibility:hidden;backface-visibility:hidden';
+    // 优先挂到 invPanel（背包打开时它必定可见且 z-index 高）；invPanel 不可见才挂 body
+    if(invPanel && invPanel.style.display==='block'){
+      invPanel.appendChild(actEl);
+    } else {
+      document.body.appendChild(actEl);
+    }
   } else {
     tipEl.appendChild(actEl);
   }
