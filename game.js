@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.1';
+const GAME_VERSION = 'v0.32.2';
 const GAME_BUILD   = '2026-06-09';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -6054,6 +6054,92 @@ function rebuildInv(){
 const toastWrap=document.getElementById('toast');
 function toast(msg){const d=document.createElement('div');d.className='toast-item';d.textContent=msg;toastWrap.appendChild(d);setTimeout(()=>d.remove(),2100);}
 
+// 通用二次确认对话框（保存/读取/危险操作前调用）
+// 风格与游戏其他面板一致：金边、深底、模态遮罩；点确认/取消/遮罩外都正确销毁
+// 用法：confirmDialog({title:'...', msg:'...', okLabel:'确定', cancelLabel:'取消', onOk, onCancel, danger:false})
+function confirmDialog(opts){
+  opts = opts || {};
+  const title = opts.title || '请确认';
+  const msg   = opts.msg   || '';
+  const okLbl = opts.okLabel || '确 定';
+  const caLbl = opts.cancelLabel || '取 消';
+  const danger= !!opts.danger;
+  // 防止重复弹出
+  const old = document.getElementById('confirmDialog');
+  if(old) old.remove();
+
+  const mask = document.createElement('div');
+  mask.id = 'confirmDialog';
+  mask.style.cssText =
+    'position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.7);'+
+    'display:flex;align-items:center;justify-content:center;'+
+    'animation:cfdFadeIn .18s ease-out;pointer-events:auto';
+
+  const panel = document.createElement('div');
+  panel.style.cssText =
+    'min-width:280px;max-width:86vw;background:linear-gradient(180deg,#241c10,#15110b);'+
+    'border:2px solid var(--gold);border-radius:8px;color:#ddd;text-align:center;padding:20px 22px;'+
+    'box-shadow:0 0 30px rgba(232,196,90,.5),0 0 80px rgba(0,0,0,.7);'+
+    'animation:cfdScaleIn .22s cubic-bezier(.3,1.6,.5,1)';
+
+  const okColor = danger ? '#ff8a8a' : '#ffd76a';
+  const okBg    = danger ? 'linear-gradient(180deg,#5a1414,#3a0a0a)' : 'linear-gradient(180deg,#3a2a14,#241c10)';
+  const okBorder= danger ? '#c83030' : 'var(--gold)';
+
+  panel.innerHTML =
+    `<div style="color:var(--gold);font-size:16px;font-weight:bold;letter-spacing:3px;margin-bottom:10px">${title}</div>`+
+    `<div style="color:#ccc;font-size:13px;line-height:1.7;margin-bottom:18px;letter-spacing:1px">${msg}</div>`+
+    `<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">`+
+    `  <button class="cfdOk" style="padding:9px 24px;font-size:13px;`+
+    `    background:${okBg};color:${okColor};border:2px solid ${okBorder};`+
+    `    border-radius:5px;cursor:pointer;font-family:inherit;letter-spacing:3px;font-weight:bold;`+
+    `    box-shadow:0 0 10px rgba(232,196,90,.4)">${okLbl}</button>`+
+    `  <button class="cfdCancel" style="padding:9px 24px;font-size:13px;`+
+    `    background:#1a1408;color:#999;border:2px solid #555;`+
+    `    border-radius:5px;cursor:pointer;font-family:inherit;letter-spacing:3px">${caLbl}</button>`+
+    `</div>`;
+
+  mask.appendChild(panel);
+  document.body.appendChild(mask);
+
+  const close = ()=>{
+    mask.style.animation = 'cfdFadeOut .15s ease-in forwards';
+    setTimeout(()=>{ mask.remove(); }, 160);
+  };
+  const onOk = (e)=>{
+    e && e.stopPropagation && e.stopPropagation();
+    e && e.preventDefault && e.preventDefault();
+    close();
+    try{ opts.onOk && opts.onOk(); }catch(err){ console.warn('[confirmDialog] onOk error:', err); }
+  };
+  const onCancel = (e)=>{
+    e && e.stopPropagation && e.stopPropagation();
+    e && e.preventDefault && e.preventDefault();
+    close();
+    try{ opts.onCancel && opts.onCancel(); }catch(err){ console.warn('[confirmDialog] onCancel error:', err); }
+  };
+  // 阻止点击 panel 内部冒泡到 mask（点 mask 才取消）
+  panel.addEventListener('click', e=>e.stopPropagation());
+  panel.addEventListener('touchstart', e=>e.stopPropagation(), {passive:true});
+  // 点遮罩外 = 取消
+  mask.addEventListener('click', onCancel);
+  mask.addEventListener('touchstart', onCancel, {passive:false});
+
+  const okBtn = panel.querySelector('.cfdOk');
+  const caBtn = panel.querySelector('.cfdCancel');
+  okBtn.addEventListener('click', onOk);
+  okBtn.addEventListener('touchstart', onOk, {passive:false});
+  caBtn.addEventListener('click', onCancel);
+  caBtn.addEventListener('touchstart', onCancel, {passive:false});
+
+  // ESC 取消、Enter 确认
+  const onKey = (e)=>{
+    if(e.code==='Escape'){ onCancel(e); document.removeEventListener('keydown', onKey); }
+    else if(e.code==='Enter' || e.code==='Space'){ onOk(e); document.removeEventListener('keydown', onKey); }
+  };
+  document.addEventListener('keydown', onKey);
+}
+
 // 醒目的大字提示（保存/读取成功等）— 屏幕中上居中、金边脉冲、2 秒淡出
 function showBigStatus(msg, color){
   color = color || 'var(--gold)';
@@ -6205,8 +6291,59 @@ spawnWave();
     btn.addEventListener('touchstart', trigger, {passive:false});
     btn.addEventListener('click',      trigger);
   };
-  wire(btnSave, ()=> saveGame(false));
-  wire(btnLoad, ()=> loadGame());
+  // 保存：若已有存档需提示玩家会"覆盖"旧档；否则简单确认
+  wire(btnSave, ()=>{
+    if(hasSave()){
+      let oldInfo = '';
+      try{
+        const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if(d && d.player){
+          const when = d.ts ? new Date(d.ts).toLocaleString() : '';
+          oldInfo = `<br/><span style="color:#888;font-size:11px">旧存档：Lv.${d.player.level} · 难度${d.difficulty||1} · ${when}</span>`;
+        }
+      }catch(_){}
+      confirmDialog({
+        title: '💾 保 存 进 度',
+        msg: `将以当前状态<b style="color:var(--gold)"> 覆盖 </b>旧存档。${oldInfo}`,
+        okLabel: '✓ 覆盖保存',
+        cancelLabel: '取 消',
+        onOk: ()=> saveGame(false),
+      });
+    } else {
+      confirmDialog({
+        title: '💾 保 存 进 度',
+        msg: '把当前等级、装备、波次写入本地存档？',
+        okLabel: '✓ 保 存',
+        cancelLabel: '取 消',
+        onOk: ()=> saveGame(false),
+      });
+    }
+  });
+
+  // 读取：会丢弃当前进度回到存档点，要求显式确认（红色危险按钮）
+  wire(btnLoad, ()=>{
+    if(!hasSave()){
+      if(typeof showBigStatus==='function') showBigStatus('⚠ 没有可用存档', '#ff7070');
+      else toast('⚠ 没有可用存档');
+      return;
+    }
+    let info = '';
+    try{
+      const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if(d && d.player){
+        const when = d.ts ? new Date(d.ts).toLocaleString() : '';
+        info = `<br/><span style="color:var(--gold)">Lv.${d.player.level} · 难度${d.difficulty||1}</span><br/><span style="color:#888;font-size:11px">${when}</span>`;
+      }
+    }catch(_){}
+    confirmDialog({
+      title: '📂 读 取 存 档',
+      msg: `将<b style="color:#ff8a8a">丢弃</b>当前进度，回到存档点。${info}`,
+      okLabel: '✓ 读 取',
+      cancelLabel: '取 消',
+      danger: true,
+      onOk: ()=> loadGame(),
+    });
+  });
   // 启动时若检测到存档，提示玩家可读取
   if(hasSave()){
     try{

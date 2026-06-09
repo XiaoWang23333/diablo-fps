@@ -262,6 +262,13 @@
   .dmg.crit{font-size:26px;color:#ffeb3b}
   @keyframes dmgFloat{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-60px);opacity:0}}
 
+  /* 通用二次确认对话框动画 */
+  @keyframes cfdFadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes cfdFadeOut{from{opacity:1}to{opacity:0}}
+  @keyframes cfdScaleIn{from{transform:scale(.86);opacity:0}to{transform:scale(1);opacity:1}}
+  #confirmDialog .cfdOk:hover{filter:brightness(1.25)}
+  #confirmDialog .cfdCancel:hover{background:#251f10 !important;color:#ccc !important;border-color:#888 !important}
+
   /* ========== 模式选择卡片（开始菜单） ========== */
   .modeCard{flex:0 0 auto;min-width:120px;padding:14px 16px;border:2px solid #6b5a2b;border-radius:8px;
             background:#15110b;color:#ddd;cursor:pointer;text-align:center;transition:all .15s ease}
