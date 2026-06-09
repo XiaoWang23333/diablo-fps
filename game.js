@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.31.0';
-const GAME_BUILD   = '2026-06-08';
+const GAME_VERSION = 'v0.32.1';
+const GAME_BUILD   = '2026-06-09';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -210,6 +210,18 @@ const Audio = (function(){
   // ===== 各种游戏音效 =====
   return {
     init: ensure,
+    // 用户首次手势中调用：强制创建 + resume + 播一段静音脉冲，解锁移动端 AudioContext
+    unlock(){
+      const c = ensure();
+      if(!c) return;
+      try{
+        if(c.state==='suspended') c.resume();
+        // 极短静音脉冲——确保 iOS Safari 真正"启动"音频管线
+        const o = c.createOscillator(), g = c.createGain();
+        g.gain.value = 0; o.connect(g); g.connect(c.destination);
+        o.start(0); o.stop(c.currentTime + 0.02);
+      }catch(_){}
+    },
     startBGM, stopBGM,
     setMute(m){ muted=m; if(ensure()){ master.gain.value = m?0:1; } },
     isMuted(){ return muted; },
@@ -1212,50 +1224,25 @@ function showPauseOverlay(){
   // 版本号仅在暂停界面显示
   const vb = document.getElementById('verBadge');
   if(vb) vb.style.display='block';
-  // 绑定「打开背包」按钮：点击后隐藏 overlay、打开背包；关闭背包时若仍处于暂停态则恢复 overlay
+  // 绑定「打开背包」按钮：使用 _invFromOverlay='pause' 标记，让 toggleInv 关闭时自动回到暂停 overlay
   const pi = document.getElementById('btnPauseInv');
   if(pi){
     const open = (e)=>{
       e && e.stopPropagation && e.stopPropagation();
       e && e.preventDefault && e.preventDefault();
+      // 标记入口来源 → 影响 toggleInv 关闭时的回归路径
+      _invFromOverlay = 'pause';
       // 隐藏暂停 overlay 让位给背包；保持 gamePaused = true
       overlay.style.display = 'none';
-      // 背包面板需要在所有面板之上：临时拉高 z-index，关闭时恢复
+      // 拉高背包/tip 等 z-index 到 overlay(50) 之上；toggleInv 关闭时会复位
       invPanel.style.zIndex = 60;
       tipEl.style.zIndex = 70;
       tipCmpEl.style.zIndex = 70;
       const gup = document.getElementById('gemUsePanel'); if(gup) gup.style.zIndex = 65;
       const sop = document.getElementById('socketPanel'); if(sop) sop.style.zIndex = 65;
       const fup = document.getElementById('fusePanel');   if(fup) fup.style.zIndex = 65;
-      invPanel.style.display='block';
-      _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
-      if(typeof rebuildInv==='function') rebuildInv();
-      Audio.uiOpen && Audio.uiOpen();
-      // 监听背包关闭：恢复暂停 overlay
-      const invCb = document.getElementById('invCloseBtn');
-      if(invCb){
-        const restore = (ev)=>{
-          ev && ev.stopPropagation && ev.stopPropagation();
-          ev && ev.preventDefault && ev.preventDefault();
-          if(typeof closeGemUsePanel==='function') closeGemUsePanel();
-          if(typeof closeSocketPanel==='function') closeSocketPanel();
-          invPanel.style.display='none';
-          invPanel.style.zIndex='';
-          tipEl.style.zIndex='';
-          tipCmpEl.style.zIndex='';
-          if(gup) gup.style.zIndex='';
-          if(sop) sop.style.zIndex='';
-          if(fup) fup.style.zIndex='';
-          // 仍处于暂停状态（玩家没死）→ 重新弹出暂停 overlay
-          if(gamePaused && !player._dead){
-            showPauseOverlay();
-          }
-          invCb.removeEventListener('click', restore);
-          invCb.removeEventListener('touchstart', restore);
-        };
-        invCb.addEventListener('click', restore, {once:true});
-        invCb.addEventListener('touchstart', restore, {passive:false, once:true});
-      }
+      // 直接通过 toggleInv 走标准开关流程
+      toggleInv(false);
     };
     pi.addEventListener('click', open);
     pi.addEventListener('touchstart', open, {passive:false});
@@ -1301,48 +1288,19 @@ function showDeathOverlay(){
       // 关闭可能残留的镶嵌/孔位面板，避免叠加 UI 干扰
       if(typeof closeGemUsePanel==='function') closeGemUsePanel();
       if(typeof closeSocketPanel==='function') closeSocketPanel();
-      // 临时隐藏死亡 overlay 让出 z-index，背包关闭时再恢复
+      // 标记入口来源 → toggleInv 关闭时会自动回到死亡 overlay（不取消 gamePaused / 不复活）
+      _invFromOverlay = 'death';
+      // 临时隐藏死亡 overlay 让出 z-index
       overlay.style.display = 'none';
-      // 死亡场景下整个 UI 层级需要拉高——overlay 默认 z=50，invPanel=20、tip=30、gemUse/socket=25 都低于 overlay，
-      // 如果只显示 invPanel 不动 z-index，玩家点装备弹出的 tip 会被 overlay/invPanel 自身遮挡看不见，
-      // 表现就是"点了没反应"。这里把整套 UI 层级整体抬到 overlay 之上：
+      // 死亡场景下整个 UI 层级需要拉高（toggleInv 关闭时统一复位）
       invPanel.style.zIndex = 60;
       tipEl.style.zIndex = 70;
       tipCmpEl.style.zIndex = 70;
-      const gup = document.getElementById('gemUsePanel');     if(gup) gup.style.zIndex = 65;
-      const sop = document.getElementById('socketPanel');     if(sop) sop.style.zIndex = 65;
-      const fup = document.getElementById('fusePanel');       if(fup) fup.style.zIndex = 65;
-      invPanel.style.display='block';
-      _hoverIdx=-1; if(typeof hideTip==='function') hideTip();
-      if(typeof rebuildInv==='function') rebuildInv();
-      Audio.uiOpen && Audio.uiOpen();
-      // 背包关闭按钮在死亡场景下需特别处理：关闭时恢复死亡 overlay
-      const invCb = document.getElementById('invCloseBtn');
-      if(invCb){
-        const restore = (ev)=>{
-          ev && ev.stopPropagation && ev.stopPropagation();
-          ev && ev.preventDefault && ev.preventDefault();
-          // 同时关闭可能在背包内打开的子面板
-          if(typeof closeGemUsePanel==='function') closeGemUsePanel();
-          if(typeof closeSocketPanel==='function') closeSocketPanel();
-          invPanel.style.display='none';
-          // 复位所有临时拉高的 z-index
-          invPanel.style.zIndex='';
-          tipEl.style.zIndex='';
-          tipCmpEl.style.zIndex='';
-          if(gup) gup.style.zIndex='';
-          if(sop) sop.style.zIndex='';
-          if(fup) fup.style.zIndex='';
-          if(player._dead){
-            // 重新渲染死亡 overlay（dom 重建）
-            showDeathOverlay();
-          }
-          invCb.removeEventListener('click', restore);
-          invCb.removeEventListener('touchstart', restore);
-        };
-        invCb.addEventListener('click', restore, {once:true});
-        invCb.addEventListener('touchstart', restore, {passive:false, once:true});
-      }
+      const gup = document.getElementById('gemUsePanel'); if(gup) gup.style.zIndex = 65;
+      const sop = document.getElementById('socketPanel'); if(sop) sop.style.zIndex = 65;
+      const fup = document.getElementById('fusePanel');   if(fup) fup.style.zIndex = 65;
+      // 走标准 toggleInv 流程（关闭时自动回死亡 overlay）
+      toggleInv(false);
     };
     di.addEventListener('click', open);
     di.addEventListener('touchstart', open, {passive:false});
@@ -1624,10 +1582,19 @@ function startOrResumeGame(){
   _starting = true;
   console.log('[start] startOrResumeGame()');
 
+  // 关键：在用户首次点击「确定/继续」的手势上下文中初始化 AudioContext，
+  // 否则移动端 Safari/Chrome 一直 suspended，开局十几秒都没声音
+  try{
+    if(typeof Audio!=='undefined' && typeof Audio.unlock==='function') Audio.unlock();
+    if(typeof Audio!=='undefined' && typeof Audio.startBGM==='function') Audio.startBGM();
+  }catch(_){}
+
   // ① 先把暂停解掉、菜单藏起来 —— 即使后面 lock 失败也确保游戏能跑
   gamePaused = false;
   _autosaveEnabled = true;   // 玩家正式开打后开启每波自动存档
   overlay.style.display = 'none';
+  // 清掉"从 overlay 进背包"的状态标记（玩家可能在暂停时打开过背包又走开）
+  _invFromOverlay = null;
   const h1 = overlay.querySelector('h1');
   if(h1) h1.textContent = 'DIABLO · FPS · AUTO';
   // 清除暂停/死亡 overlay 的 class，恢复确定按钮初始文案
@@ -1935,7 +1902,7 @@ function spawnExpGainPopup(gain){
   const wrap = document.createElement('div');
   wrap.id = 'expGainPopup';
   wrap.style.cssText =
-    'position:fixed;left:50%;top:22%;transform:translate(-50%,0) scale(.85);z-index:55;pointer-events:none;'+
+    'position:fixed;left:50%;top:22%;transform:translate(-50%,0) scale(.85);z-index:90;pointer-events:none;'+
     'background:rgba(0,0,0,.82);border:2px solid var(--gold);border-radius:8px;padding:14px 24px 16px;'+
     'min-width:260px;max-width:80vw;text-align:center;'+
     'box-shadow:0 0 24px var(--gold),0 0 60px rgba(0,0,0,.6);'+
@@ -3493,6 +3460,11 @@ function loadGame(){
   player.hp = Math.min(P.hp!=null?P.hp:player.hpMax, player.hpMax);
   player.mp = Math.min(P.mp!=null?P.mp:player.mpMax, player.mpMax);
   player.invuln = 3.0;
+  // 关键：如果玩家在死亡画面下点的读档，必须把 _dead 清掉，
+  // 否则 startOrResumeGame 会因 `if(player._dead) return` 而被跳过，
+  // 看起来就是"读档了但 overlay 不消失"。
+  player._dead = false;
+  if(typeof clearOverlayState==='function') clearOverlayState();
   // 刷新所有 UI
   if(typeof rebuildInv==='function') rebuildInv();
   if(typeof refreshEquip==='function') refreshEquip();
@@ -3502,9 +3474,14 @@ function loadGame(){
   // 刷出该波怪物（spawnWave 会用当前 waveLevel 并自增，与正常流程一致）
   spawnWave();
   _autosaveEnabled = true;   // 读档后开启自动存档
-  setSaveStatus(`📂 已读取：Lv.${player.level} · 第${Math.max(1,waveLevel-1)}波 · 难度${difficulty}　点击屏幕继续`);
+  setSaveStatus(`📂 已读取：Lv.${player.level} · 第${Math.max(1,waveLevel-1)}波 · 难度${difficulty}`);
   if(typeof showBigStatus==='function') showBigStatus(`📂 存档已读取：Lv.${player.level}`, '#5aa6ff');
   else toast(`📂 存档已读取：Lv.${player.level} · 难度${difficulty}`);
+  // 自动进入游戏：避免玩家"还要再点屏幕一次"的二次确认体验
+  // 使用一个微小延迟，让 showBigStatus 先弹出来，玩家能看到反馈
+  setTimeout(()=>{
+    if(typeof startOrResumeGame==='function') startOrResumeGame();
+  }, 350);
   return true;
 }
 
@@ -4052,6 +4029,8 @@ function respawn(){
   player.vel.set(0,0,0);
   player.onGround = true;
   player._dead = false;
+  // 清掉"从 overlay 进背包"的状态标记，防止下次背包关闭时误回死亡画面
+  _invFromOverlay = null;
 
   // 隐藏死亡画面（不要显示开始菜单）
   overlay.style.display = 'none';
@@ -4708,6 +4687,8 @@ function showItemTipWithActions(it, idx, x, y){
 const invPanel=document.getElementById('invPanel');
 // 记忆上一次手柄查看的格子位置；下次打开背包时尝试恢复到这一格
 let _lastPadCursor = 0;
+// 是否"从 overlay（暂停/死亡界面）打开"：true 时关闭背包应回到 overlay，而非进入战斗
+let _invFromOverlay = null;   // null | 'pause' | 'death'
 function toggleInv(byPad){
   if(invPanel.style.display==='block'){
     // ---- 关闭背包 ----
@@ -4717,11 +4698,35 @@ function toggleInv(byPad){
     if(padCursor>=0) _lastPadCursor = padCursor;
     Audio.uiClose();
     invPanel.style.display='none';
-    gamePaused=false;
     _hoverIdx=-1;
     padCursor=-1;
     hideTip();
     document.body.classList.remove('pad-inv-open');
+    // 复位临时拉高的 z-index（死亡/暂停 overlay 入口打开时拉高过）
+    invPanel.style.zIndex='';
+    tipEl.style.zIndex='';
+    tipCmpEl.style.zIndex='';
+    const _gup = document.getElementById('gemUsePanel'); if(_gup) _gup.style.zIndex='';
+    const _sop = document.getElementById('socketPanel'); if(_sop) _sop.style.zIndex='';
+    const _fup = document.getElementById('fusePanel');   if(_fup) _fup.style.zIndex='';
+    // 关闭可能残留的子面板，避免下次再打开 overlay 时叠加
+    if(typeof closeGemUsePanel==='function') closeGemUsePanel();
+    if(typeof closeSocketPanel==='function') closeSocketPanel();
+
+    // 关键：如果是从 overlay（暂停/死亡）进入的背包 → 关闭后回到 overlay，保持 gamePaused=true
+    if(_invFromOverlay){
+      const from = _invFromOverlay;
+      _invFromOverlay = null;
+      gamePaused = true;
+      if(from==='death' && player._dead){
+        if(typeof showDeathOverlay==='function') showDeathOverlay();
+      } else {
+        if(typeof showPauseOverlay==='function') showPauseOverlay();
+      }
+      return;
+    }
+
+    gamePaused=false;
     // 触屏模式：不请求 PointerLock，直接走 fallback 标记为已锁定
     if(InputMode && InputMode.current==='touch'){
       controls._fallback = true;
@@ -5091,6 +5096,11 @@ function renderFuseList(){
     `;
     div.addEventListener('click', ()=>{
       if(_fuseAnimating) return;
+      // 触屏点击不会触发 mouseenter，必须在这里同步选中态，
+      // 否则 executeFuseWithAnim 用 _fusePadSel 取 selRow 会拿错位置 → 飞行起点错位甚至看不到动画
+      _fusePadSel = idx;
+      fuseListEl.querySelectorAll('.fuseItem.padSel').forEach(el=>el.classList.remove('padSel'));
+      div.classList.add('padSel');
       executeFuseWithAnim(grp);
     });
     div.addEventListener('mouseenter', ()=>{
@@ -6172,6 +6182,8 @@ applyEquipStats();
 // 开场赠送：1 瓶血 + 1 瓶蓝（手机模式新手开局减少卡死风险，PC/手柄玩家也用得上）
 player.inv.push(makeHpPotion(0));
 player.inv.push(makeMpPotion(0));
+// 同步触屏血/蓝按钮上的瓶数角标（不调用就会一直显示 0 直到第一次打开背包）
+if(typeof updatePotionCounts==='function') updatePotionCounts();
 // 初始化任务系统（必须在 applyEquipStats 之后，确保 player 已就绪）
 Quests.init();
 renderProgress();        // 初始化关卡进度面板

@@ -433,6 +433,14 @@
     border-color:var(--gold);color:#ffd76a;font-weight:bold;
     box-shadow:0 0 10px rgba(232,196,90,.5);padding:8px 16px}
   #tipActions button.primary:hover{filter:brightness(1.2)}
+  /* 触屏模式：把按钮组改为 fixed 钉到屏幕底部 —— sticky 在某些移动浏览器
+     遇到 inline maxHeight + overflowY:auto 时不可靠，导致用户滚动看不到按钮。
+     fixed 简单粗暴，永远可见。 */
+  body.mode-touch #tipActions{position:fixed;left:8px;right:8px;bottom:calc(8px + var(--safe-b));
+    margin:0;padding:10px;background:rgba(20,16,11,.96);border:2px solid var(--gold);
+    border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,.8);z-index:71}
+  /* 给 tip 自身底部留出空间，避免内容被 fixed 按钮挡住 */
+  body.mode-touch .tip{padding-bottom:80px !important}
   /* 触屏模式 tip 允许接收点击（按钮要可点）；其他模式保持鼠标穿透 */
   body.mode-touch .tip{pointer-events:auto}
   /* 背包小红点：替代 NEW 标签 */
