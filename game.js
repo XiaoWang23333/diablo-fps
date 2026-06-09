@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.2';
+const GAME_VERSION = 'v0.32.3';
 const GAME_BUILD   = '2026-06-09';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -4621,18 +4621,21 @@ function hideTip(){
   // 触屏模式下 tip 用了 inline width/maxWidth，下次显示前清掉
   tipEl.style.width=''; tipEl.style.maxWidth=''; tipEl.style.maxHeight=''; tipEl.style.overflowY='';
   tipCmpEl.style.width=''; tipCmpEl.style.maxWidth=''; tipCmpEl.style.maxHeight=''; tipCmpEl.style.overflowY='';
+  // 清理可能挂在 body 上的独立 tipActions（触屏模式下挂出 tipEl 避免被 overflow/stacking 裁剪）
+  const ext = document.getElementById('tipActions');
+  if(ext) ext.remove();
 }
 
 // 触屏模式：显示装备/物品 tip 时附带操作按钮（装备/替换/使用/丢弃）
 // 调用时 idx 为该物品在 player.inv 的下标
 function showItemTipWithActions(it, idx, x, y){
+  // 先清掉旧 actEl（防止上次残留浮在屏幕底部）
+  const oldA = document.getElementById('tipActions');
+  if(oldA) oldA.remove();
   showTip(it, x, y);
   // 复用 tipEl，把按钮注入到末尾
   if(tipEl.style.display==='none') return;
-  // 已经追加过的按钮区先移除
-  let actEl = tipEl.querySelector('#tipActions');
-  if(actEl) actEl.remove();
-  actEl = document.createElement('div');
+  const actEl = document.createElement('div');
   actEl.id = 'tipActions';
   // 根据物品类型决定按钮
   const buttons = [];
@@ -4681,7 +4684,21 @@ function showItemTipWithActions(it, idx, x, y){
     btn.addEventListener('touchstart', stop, {passive:false});
     actEl.appendChild(btn);
   });
-  tipEl.appendChild(actEl);
+  // 触屏模式：actEl 挂到 body，避免被 tipEl 的 overflow:auto / stacking context 裁掉
+  // （之前 sticky/fixed 钉底在某些移动浏览器都失效，导致按钮看不见）
+  // 桌面/手柄模式：保持挂在 tipEl 内（位置随 tip 浮动，体验一致）
+  if(InputMode && InputMode.current==='touch'){
+    // 关键：直接用内联样式兜底（避免 CSS 选择器优先级 / 加载顺序意外失效）
+    actEl.style.cssText =
+      'position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom, 0px));'+
+      'margin:0;padding:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;'+
+      'background:rgba(20,16,11,.96);border:2px solid #e8c45a;border-radius:8px;'+
+      'box-shadow:0 0 24px rgba(232,196,90,.55), 0 0 60px rgba(0,0,0,.7);'+
+      'z-index:9999;pointer-events:auto';
+    document.body.appendChild(actEl);
+  } else {
+    tipEl.appendChild(actEl);
+  }
 }
 
 const invPanel=document.getElementById('invPanel');

@@ -442,12 +442,19 @@
   #tipActions button.primary:hover{filter:brightness(1.2)}
   /* 触屏模式：把按钮组改为 fixed 钉到屏幕底部 —— sticky 在某些移动浏览器
      遇到 inline maxHeight + overflowY:auto 时不可靠，导致用户滚动看不到按钮。
-     fixed 简单粗暴，永远可见。 */
+     fixed 简单粗暴，永远可见。
+     注意：在 JS 中 actEl 触屏模式下直接挂到 body 上（脱离 tipEl 的 stacking context），
+     这样这里的 z-index 才能真正高过死亡 overlay 下临时拉高到 60 的 invPanel。 */
   body.mode-touch #tipActions{position:fixed;left:8px;right:8px;bottom:calc(8px + var(--safe-b));
     margin:0;padding:10px;background:rgba(20,16,11,.96);border:2px solid var(--gold);
-    border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,.8);z-index:71}
+    border-radius:8px;box-shadow:0 0 24px rgba(232,196,90,.55), 0 0 60px rgba(0,0,0,.7);
+    z-index:75;animation:tipActsIn .22s cubic-bezier(.3,1.6,.5,1)}
+  @keyframes tipActsIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  /* 触屏模式下按钮再放大些便于触摸 */
+  body.mode-touch #tipActions button{padding:10px 18px;font-size:14px;min-width:70px}
+  body.mode-touch #tipActions button.primary{padding:12px 22px;font-size:15px;min-width:120px}
   /* 给 tip 自身底部留出空间，避免内容被 fixed 按钮挡住 */
-  body.mode-touch .tip{padding-bottom:80px !important}
+  body.mode-touch .tip{padding-bottom:90px !important}
   /* 触屏模式 tip 允许接收点击（按钮要可点）；其他模式保持鼠标穿透 */
   body.mode-touch .tip{pointer-events:auto}
   /* 背包小红点：替代 NEW 标签 */
