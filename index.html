@@ -47,9 +47,6 @@
   .tgl{background:rgba(0,0,0,.6);color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:1px}
   .tgl:hover{border-color:var(--gold);color:#fff}
   .tgl.on{background:rgba(122,217,106,0.18);border-color:#7bd96a;color:#bff7ad}
-  /* 手柄打开背包时藏掉鼠标光标，并屏蔽鼠标 hover 干扰 */
-  body.pad-inv-open{cursor:none}
-  body.pad-inv-open .invSlot{pointer-events:none}
   #toast{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:7;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px}
   .toast-item{background:rgba(0,0,0,.55);padding:4px 10px;border-radius:3px;font-size:13px;border:1px solid #333;animation:fadeUp 2s forwards}
   @keyframes fadeUp{0%{opacity:0;transform:translateY(10px)}15%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
@@ -284,7 +281,6 @@
                            border-radius:6px;padding:10px 14px;text-align:left}
   #modeHelp .modeHelpBlock p{font-size:13px;line-height:1.8;color:#ddd}
   body.mode-kbm   #modeHelp .modeHelpBlock[data-mode="kbm"]  {display:block}
-  body.mode-pad   #modeHelp .modeHelpBlock[data-mode="pad"]  {display:block}
   body.mode-touch #modeHelp .modeHelpBlock[data-mode="touch"]{display:block}
 
   /* 确定按钮 */
@@ -366,7 +362,6 @@
   /* 触屏模式：HUD 紧凑、隐藏侧栏式信息 */
   body.mode-touch #info{display:none}
   body.mode-touch #toggleBar{display:none}
-  body.mode-touch #padRow{display:none}
   /* 关卡进度面板：左上 */
   body.mode-touch #progressPanel{top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));right:auto;
                                  width:180px;font-size:10px;padding:6px 8px}
@@ -417,10 +412,6 @@
     padding-top:var(--safe-t);padding-bottom:var(--safe-b);
     overflow-y:auto;
   }
-
-  /* 手柄模式：隐藏鼠标光标 */
-  body.mode-pad{cursor:none}
-  body.mode-pad #crosshair{filter:drop-shadow(0 0 3px #fff)}
 
   /* 各界面的 hint 文案：触屏模式下隐藏（手柄/键鼠相关） */
   body.mode-touch #invHint,
@@ -473,7 +464,6 @@
   <div class="row"><span>护甲</span><span id="sArm">0</span></div>
   <div class="row"><span>击杀</span><span id="sKill">0</span></div>
   <div class="row"><span>区域</span><span id="sArea">血色荒野 #1</span></div>
-  <div class="row" id="padRow" style="display:none"><span style="color:#7bd96a">🎮 手柄</span><span id="padName" style="color:#7bd96a;font-size:11px">已连接</span></div>
 </div>
 <div id="minimap"><canvas id="mmCanvas" width="180" height="180"></canvas></div>
 <div id="progressPanel">
@@ -604,7 +594,6 @@
   <h1>DIABLO · FPS · AUTO</h1>
   <div id="modeSelect" style="display:flex;gap:10px;justify-content:center;margin:10px 0 14px;flex-wrap:wrap">
     <div class="modeCard" data-mode="kbm"><div class="mIco">🖥</div><div class="mName">PC 键鼠</div><div class="mTip">WASD + 鼠标</div></div>
-    <div class="modeCard" data-mode="pad"><div class="mIco">🎮</div><div class="mName">PC 手柄</div><div class="mTip">摇杆 + 扳机</div></div>
     <div class="modeCard" data-mode="touch"><div class="mIco">📱</div><div class="mName">手机竖屏</div><div class="mTip">虚拟摇杆 + 触屏</div></div>
   </div>
   <p id="modeHint" style="color:#aaa;font-size:12px;margin-bottom:6px">请先选择操作模式（已自动检测推荐）</p>
@@ -616,14 +605,6 @@
       <span class="key">WASD</span> 移动　<span class="key">Shift</span> 跑步开关　<span class="key">空格</span> 跳　<span class="key">T</span> 托管　<span class="key">M</span> 静音<br/>
       <span class="key">F</span> 拾取　<span class="key">I</span> 背包　<span class="key">Q</span> 喝🧪生命药水　<span class="key">E</span> 喝🧴法力药水　<span class="key">1-8</span> 切技能<br/>
       <span class="key">鼠标左键</span> 释放技能　<span class="key">ESC</span> 暂停 / 释放鼠标</p>
-    </div>
-    <div class="modeHelpBlock" data-mode="pad">
-      <p><span style="color:#7bd96a">🎮 PC 手柄</span><br/>
-      左摇杆 <b>移动</b> · 右摇杆 <b>视角</b> · L3 <b>跑步开关</b><br/>
-      <b>A</b> 跳　<b>X</b> 拾取　<b>Y</b> 背包<br/>
-      <b>LB</b> 喝🧪生命　<b>RB</b> 喝🧴法力<br/>
-      <b>D-Pad ←→</b> 切技能　<b>RT</b> 释放技能　<b>LT</b> 看技能描述<br/>
-      <b>Start</b> 开始 / 暂停　<b>Back</b> 托管开关</p>
     </div>
     <div class="modeHelpBlock" data-mode="touch">
       <p><span style="color:#5aa6ff">📱 手机竖屏</span><br/>

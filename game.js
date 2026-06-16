@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.6';
+const GAME_VERSION = 'v0.32.8';
 const GAME_BUILD   = '2026-06-16';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -120,7 +120,10 @@ const Audio = (function(){
   }
 
   // ===== BGM：低频持续音 + 远处钟声 + 风声（D1 大教堂氛围） =====
+  // v0.32.7 起按用户要求完全关闭背景音乐；保留函数定义避免外部调用报错
   function startBGM(){
+    return; // 背景音乐已禁用
+    // eslint-disable-next-line no-unreachable
     if(bgmStarted) return;
     if(!ensure()) return;
     if(ctx.state==='suspended') ctx.resume();
@@ -1121,20 +1124,14 @@ const gp = {
   LOOK_Y: 1.8,
 };
 function applyDeadzone(v, dz){ return Math.abs(v)<dz ? 0 : (v - Math.sign(v)*dz)/(1-dz); }
+// 手柄事件保留（不提示 UI 也不改变模式选择，仅作为隐藏的辅助输入兼容已有玩家）
 addEventListener('gamepadconnected', e=>{
   gp.connected=true; gp.index=e.gamepad.index;
-  toast('🎮 手柄已连接：'+e.gamepad.id);
-  const row=document.getElementById('padRow'), name=document.getElementById('padName');
-  if(row) row.style.display='flex';
-  if(name) name.textContent = (e.gamepad.id||'').slice(0,18);
   refreshSkillBar();
 });
 addEventListener('gamepaddisconnected', e=>{
   if(e.gamepad.index===gp.index){
     gp.connected=false; gp.index=-1;
-    toast('🎮 手柄已断开');
-    const row=document.getElementById('padRow');
-    if(row) row.style.display='none';
   }
 });
 
@@ -1330,24 +1327,23 @@ let _justStartedAt = 0;
 // 防止 click + pointerdown 双触发（200ms 内的第二次进入直接忽略）
 let _starting = false;
 
-// ===================== 输入模式系统（PC键鼠 / PC手柄 / 手机竖屏） =====================
-// 三模式共用相同的游戏逻辑，仅输入层与 HUD 显示不同。
+// ===================== 输入模式系统（PC键鼠 / 手机竖屏） =====================
+// 两种模式共用相同的游戏逻辑，仅输入层与 HUD 显示不同。
 // 持久化到 localStorage.inputMode。开始菜单的卡片切换会立即应用 body 的 mode-* class。
+// 注：v0.32.8 起移除 PC 手柄模式选项（手柄检测/事件代码仍保留作为辅助输入，但不再作为独立 UI 模式）
 const InputMode = {
-  current: null,        // 'kbm' | 'pad' | 'touch' | null
-  // 自动检测推荐：移动端→touch；已有手柄→pad；否则 kbm
+  current: null,        // 'kbm' | 'touch' | null
+  // 自动检测推荐：移动端→touch；否则 kbm
   detect(){
     const isTouchDev = ('ontouchstart' in window) || (navigator.maxTouchPoints||0) > 1;
     const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent||'');
     if(isTouchDev && isMobile) return 'touch';
-    try{
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      for(const p of pads){ if(p && p.connected) return 'pad'; }
-    }catch(_){}
     return 'kbm';
   },
   apply(mode){
-    if(!['kbm','pad','touch'].includes(mode)) mode='kbm';
+    // 兼容旧存档：把过期的 'pad' 归一到 'kbm'
+    if(mode==='pad') mode='kbm';
+    if(!['kbm','touch'].includes(mode)) mode='kbm';
     this.current = mode;
     document.body.classList.remove('mode-kbm','mode-pad','mode-touch');
     document.body.classList.add('mode-'+mode);
@@ -1589,9 +1585,9 @@ function startOrResumeGame(){
 
   // 关键：在用户首次点击「确定/继续」的手势上下文中初始化 AudioContext，
   // 否则移动端 Safari/Chrome 一直 suspended，开局十几秒都没声音
+  // 注意：不启动 BGM（用户反馈持续低频背景音影响体验），只解锁音频管线供 SFX 使用
   try{
     if(typeof Audio!=='undefined' && typeof Audio.unlock==='function') Audio.unlock();
-    if(typeof Audio!=='undefined' && typeof Audio.startBGM==='function') Audio.startBGM();
   }catch(_){}
 
   // ① 先把暂停解掉、菜单藏起来 —— 即使后面 lock 失败也确保游戏能跑
