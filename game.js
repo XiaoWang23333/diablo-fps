@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.5';
-const GAME_BUILD   = '2026-06-10';
+const GAME_VERSION = 'v0.32.6';
+const GAME_BUILD   = '2026-06-16';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -1241,6 +1241,9 @@ function showPauseOverlay(){
       const gup = document.getElementById('gemUsePanel'); if(gup) gup.style.zIndex = 65;
       const sop = document.getElementById('socketPanel'); if(sop) sop.style.zIndex = 65;
       const fup = document.getElementById('fusePanel');   if(fup) fup.style.zIndex = 65;
+      // 合成动画浮层 #fuseFx 默认 z-index:45，比 fusePanel 65 还低 → 死亡/暂停场景下动画被遮挡看不见。
+      // 必须拉到 fusePanel 之上。
+      const ffx = document.getElementById('fuseFx');      if(ffx) ffx.style.zIndex = 75;
       // 直接通过 toggleInv 走标准开关流程
       toggleInv(false);
     };
@@ -1299,6 +1302,8 @@ function showDeathOverlay(){
       const gup = document.getElementById('gemUsePanel'); if(gup) gup.style.zIndex = 65;
       const sop = document.getElementById('socketPanel'); if(sop) sop.style.zIndex = 65;
       const fup = document.getElementById('fusePanel');   if(fup) fup.style.zIndex = 65;
+      // 合成动画浮层 #fuseFx 默认 z-index:45，比 fusePanel 65 还低 → 死亡场景下动画被遮挡看不见。
+      const ffx = document.getElementById('fuseFx');      if(ffx) ffx.style.zIndex = 75;
       // 走标准 toggleInv 流程（关闭时自动回死亡 overlay）
       toggleInv(false);
     };
@@ -4738,6 +4743,7 @@ function toggleInv(byPad){
     const _gup = document.getElementById('gemUsePanel'); if(_gup) _gup.style.zIndex='';
     const _sop = document.getElementById('socketPanel'); if(_sop) _sop.style.zIndex='';
     const _fup = document.getElementById('fusePanel');   if(_fup) _fup.style.zIndex='';
+    const _ffx = document.getElementById('fuseFx');      if(_ffx) _ffx.style.zIndex='';
     // 关闭可能残留的子面板，避免下次再打开 overlay 时叠加
     if(typeof closeGemUsePanel==='function') closeGemUsePanel();
     if(typeof closeSocketPanel==='function') closeSocketPanel();
