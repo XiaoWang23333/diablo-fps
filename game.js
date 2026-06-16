@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.8';
+const GAME_VERSION = 'v0.32.9';
 const GAME_BUILD   = '2026-06-16';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -4043,7 +4043,11 @@ function respawn(){
   try { controls.lock(); } catch(_) {}
 
   toast('复活！2 秒无敌');
-  // 立刻再来一波
+  // 立刻再来一波，但保留当前波次（不推进）。spawnWave 末尾在非最终波时会 waveLevel++，
+  // 这里先 -1 让它增回原值，避免"每死一次跳一波"的体感；最终波本身不自增，不需修正
+  if(waveLevel !== FINAL_BOSS_WAVE){
+    waveLevel = Math.max(1, waveLevel - 1);
+  }
   spawnWave();
 }
 
