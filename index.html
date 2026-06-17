@@ -55,6 +55,14 @@
   #invPanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;background:#15110b;border:2px solid #6b5a2b;border-radius:6px;color:#ddd;z-index:20;display:none;box-shadow:0 0 30px rgba(0,0,0,.9)}
   #invPanel h3{padding:8px 12px;background:#241c10;color:var(--gold);border-bottom:1px solid #6b5a2b;letter-spacing:2px}
   #invGrid{padding:12px;display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+  /* 背包分类 Tab */
+  #invTabBar{display:flex;gap:6px;padding:0 12px;border-bottom:1px solid #2a2118;background:#0c0a07}
+  #invTabBar .invTab{flex:1;padding:8px 4px;background:transparent;border:none;border-bottom:2px solid transparent;
+    color:#888;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:1px;transition:all .15s}
+  #invTabBar .invTab:hover{color:#ddd;background:rgba(232,196,90,.06)}
+  #invTabBar .invTab.active{color:var(--gold);border-bottom-color:var(--gold);background:rgba(232,196,90,.08)}
+  /* 触屏模式下 tab 加大便于触摸 */
+  body.mode-touch #invTabBar .invTab{padding:11px 4px;font-size:13px}
   .invSlot{aspect-ratio:1/1;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;position:relative}
   .invSlot:hover{border-color:var(--gold)}
   .invSlot.padCursor{border-color:#7bd96a;box-shadow:0 0 12px #7bd96a, 0 0 4px #7bd96a inset;animation:padPulse 1s ease-in-out infinite}
@@ -464,6 +472,7 @@
   <div class="row"><span>护甲</span><span id="sArm">0</span></div>
   <div class="row"><span>击杀</span><span id="sKill">0</span></div>
   <div class="row"><span>区域</span><span id="sArea">血色荒野 #1</span></div>
+  <div class="row" style="margin-top:4px;border-top:1px dashed #3a2f18;padding-top:4px"><span>流派</span><span id="sClass" style="font-size:12px;letter-spacing:1px">—</span></div>
 </div>
 <div id="minimap"><canvas id="mmCanvas" width="180" height="180"></canvas></div>
 <div id="progressPanel">
@@ -537,6 +546,12 @@
     <button id="btnFuse" class="tgl">⚗ 5 合 1 合成</button>
     <button id="btnSocket" class="tgl">💎 宝石镶嵌</button>
     <span id="fuseHint" style="font-size:11px;color:#888"></span>
+  </div>
+  <div id="invTabBar">
+    <button class="invTab active" data-cat="all">📦 全部</button>
+    <button class="invTab" data-cat="equip">⚔ 装备</button>
+    <button class="invTab" data-cat="consume">🧪 消耗</button>
+    <button class="invTab" data-cat="gem">💎 宝石</button>
   </div>
   <div id="invGrid"></div>
 </div>

@@ -2,8 +2,8 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.32.9';
-const GAME_BUILD   = '2026-06-16';
+const GAME_VERSION = 'v0.33.0';
+const GAME_BUILD   = '2026-06-17';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
 // 把版本号写到右下角小角标
@@ -1354,7 +1354,7 @@ const InputMode = {
     });
     // 触屏模式下渲染降级 + 强制开启自动施放（没有手动攻击键）
     if(mode==='touch'){
-      try{ renderer.setPixelRatio(Math.min(devicePixelRatio||1, 1.25)); }catch(_){}
+      try{ renderer.setPixelRatio(Math.min(devicePixelRatio||1, 1.0)); }catch(_){}   // v0.33 触屏基础 PR 上限 1.0（旧 1.25→1.0）
       try{ renderer.shadowMap.enabled = false; }catch(_){}
       if(scene && scene.fog){ scene.fog.far = 100; }   // 远雾拉近，省 GPU
       try{ if(typeof settings!=='undefined') settings.autoSkill = true; }catch(_){}
@@ -2173,6 +2173,8 @@ function genItem(level,slotForce){
   // 宝石孔位（按品质递增）：普通 0-1，魔法 1-2，稀有 2-3，套装 2-3，暗金 3
   item.sockets = rollSocketCount(q.key);
   item.gems = new Array(item.sockets).fill(null);
+  // 流派标签（warrior / mage / rogue）
+  tagItemClass(item);
   return item;
 }
 // 按品质生成孔数
@@ -2185,6 +2187,86 @@ function rollSocketCount(qualityKey){
     case 'set':    return r<0.4 ? 2 : 3;
     case 'unique': return 3;
     default: return 0;
+  }
+}
+
+// ===================== 装备流派 / 职业系统 (ClassTag) =====================
+// 给玩家长期目标：集齐 4 件同流派装备 → 触发"流派精通"额外加成。
+// 流派靠装备的 wType / 词条特征自动打标，不依赖人工选择。
+//   ⚔ warrior 战士   ：剑/斧 主武器、力量词条强、伤害%
+//   🔮 mage    法师   ：法杖/法球/魔棒 主武器、智力词条强、元素伤害（火/冰/雷）
+//   🗡 rogue   盗贼   ：弓 主武器、敏捷词条强、暴击率/暴伤
+const CLASS_DB = {
+  warrior: {name:'战士', icon:'⚔', color:'#ff8a5a',
+    mastery:'4 件套：力量 +20，护甲 +50，伤害% +15'},
+  mage:    {name:'法师', icon:'🔮', color:'#7bb6ff',
+    mastery:'4 件套：智力 +20，最大法力 +100，火/冰/雷 +15%'},
+  rogue:   {name:'盗贼', icon:'🗡', color:'#7bd96a',
+    mastery:'4 件套：敏捷 +20，暴击率 +10%，暴伤 +30%'},
+};
+const CLASS_KEYS = ['warrior','mage','rogue'];
+// 按 wType 给武器分配流派
+const WTYPE_CLASS = {
+  sword:'warrior', axe:'warrior',
+  staff:'mage', wand:'mage', orb:'mage',
+  bow:'rogue',
+};
+// 给一件装备打 classTag（生成完毕 + affixes 已填后调用）
+function tagItemClass(item){
+  if(!item) return;
+  // 武器：用 wType 直接确定
+  if(item.slot==='weapon' && item.wType && WTYPE_CLASS[item.wType]){
+    item.classTag = WTYPE_CLASS[item.wType];
+    return;
+  }
+  // 其他装备：根据 affixes 倾向判定
+  const score = {warrior:0, mage:0, rogue:0};
+  (item.affixes||[]).forEach(a=>{
+    const k = a.k;
+    if(k==='str' || k==='armor' || k==='dmgPct' || k==='lifeOnHit') score.warrior += a.v;
+    else if(k==='int' || k==='mpMax' || k==='fireDmg' || k==='iceDmg' || k==='lightDmg' || k==='mpRegen') score.mage += a.v;
+    else if(k==='dex' || k==='critChance' || k==='critDmg' || k==='moveSpd' || k==='expBonus') score.rogue += a.v;
+  });
+  // 套装也可能影响：set 装备倾向于 mastery 偏向
+  let best = 'warrior', bestV = -1;
+  CLASS_KEYS.forEach(k=>{ if(score[k]>bestV){ bestV = score[k]; best = k; } });
+  // 完全无词条时随机给一个，确保每件装备都有 tag
+  if(bestV <= 0){
+    item.classTag = CLASS_KEYS[Math.floor(Math.random()*CLASS_KEYS.length)];
+  } else {
+    item.classTag = best;
+  }
+}
+
+// 统计当前已装备的流派分布；4 件同流派 = 精通激活
+function getClassMastery(){
+  const count = {warrior:0, mage:0, rogue:0};
+  ['weapon','helm','armor','ring'].forEach(s=>{
+    const it = player.equip[s];
+    if(it && it.classTag && count[it.classTag]!=null) count[it.classTag]++;
+  });
+  let active = null;
+  CLASS_KEYS.forEach(k=>{ if(count[k]>=4) active = k; });
+  return {count, active};
+}
+// 把流派精通加成累加到 stats 上（在 applyEquipStats 中调用）
+function applyClassMastery(stats){
+  const m = getClassMastery();
+  if(!m.active) return;
+  if(m.active==='warrior'){
+    stats.str = (stats.str||0) + 20;
+    stats.armor = (stats.armor||0) + 50;
+    stats.dmgPct = (stats.dmgPct||0) + 15;
+  } else if(m.active==='mage'){
+    stats.int = (stats.int||0) + 20;
+    stats.mpMax = (stats.mpMax||0) + 100;
+    stats.fireDmg = (stats.fireDmg||0) + 15;
+    stats.iceDmg  = (stats.iceDmg||0) + 15;
+    stats.lightDmg= (stats.lightDmg||0) + 15;
+  } else if(m.active==='rogue'){
+    stats.dex = (stats.dex||0) + 20;
+    stats.critChance = (stats.critChance||0) + 10;
+    stats.critDmg = (stats.critDmg||0) + 30;
   }
 }
 
@@ -2231,6 +2313,8 @@ function applyEquipStats(){
     stats.dex = (stats.dex||0) + stats.allStats;
     stats.int = (stats.int||0) + stats.allStats;
   }
+  // 流派精通：集齐 4 件同流派 → 额外加成
+  if(typeof applyClassMastery==='function') applyClassMastery(stats);
   player._setCount=setCount;
   player._activeSetBonuses=activeSetBonuses;
   player._eq=stats;
@@ -2491,7 +2575,14 @@ function pickEnemyType(){
 
 // 敌人投射物（敌→我）
 const eProjectiles=[];
+// 性能保护：同屏敌方投射物硬上限，超过时丢弃最旧的（高波次远程怪密集 + 火法师 nova 等极端场景兜底）
+const E_PROJ_HARD_LIMIT = 80;
 function spawnEnemyProjectile(from,to,kind,dmg,color){
+  // 超过硬上限：先释放最早的一发，避免性能雪崩
+  if(eProjectiles.length >= E_PROJ_HARD_LIMIT){
+    const old = eProjectiles.shift();
+    if(old && old.mesh) releaseProj(old.mesh);
+  }
   const origin=from.clone(); origin.y=1.5;
   const target=to.clone();   target.y=1.5;
   const dir=target.sub(origin).normalize();
@@ -3422,6 +3513,10 @@ function _relinkItem(it){
     const q = QUALITY.find(qq=>qq.key===it.quality.key);
     if(q) it.quality = q;
   }
+  // 兼容旧存档：补打流派标签
+  if(!it.classTag && it.slot && typeof tagItemClass==='function'){
+    tagItemClass(it);
+  }
   return it;
 }
 
@@ -3534,6 +3629,8 @@ function chooseContinue(){
 
 // ---------- 投射物/特效 ----------
 const projectiles=[],aoes=[],lootDrops=[];
+// 性能保护：玩家投射物硬上限（极端连发 + 穿透 + chain 时兜底）
+const P_PROJ_HARD_LIMIT = 60;
 // 性能优化③：AI 循环复用的临时向量（避免每帧每敌 new THREE.Vector3 造成 GC）
 const _aiToP=new THREE.Vector3(), _aiSep=new THREE.Vector3();
 
@@ -3604,6 +3701,11 @@ const _lootBeamGeo = new THREE.CylinderGeometry(.05,.05,2,6);
 
 function shootProjectile(opts){
   const {origin,dir,color,range,speed=35,scale=.25,dmg,hit,pierce=false,life=2,kind}=opts;
+  // 性能保护：玩家投射物硬上限
+  if(projectiles.length >= P_PROJ_HARD_LIMIT){
+    const old = projectiles.shift();
+    if(old && old.mesh) releaseProj(old.mesh);
+  }
   const m=acquireProj(scale,color,6,kind);
   m.position.copy(origin);
   // 让 deco（锥/胶囊）朝运动方向
@@ -4052,8 +4154,10 @@ function respawn(){
 }
 
 function findBestTarget(maxRange,preferFOV=false){
-  // 仅锁定玩家面前 180° 范围内的敌人（水平面投影）
-  // fwd.dot(to_xz) >= 0 表示在前方 180° 内（含侧面 90° 边界）
+  // 锁定玩家面前一个锥形范围内的敌人（水平面投影）
+  // v0.33 起：dot 阈值从 0(180°) 收紧到 0.5(约 120° FOV) ——
+  // 玩家不"看"的敌人不被锁定，逼玩家滑动视角对准目标才能输出，找回 FPS 操作感
+  const FOV_DOT = 0.5;            // cos(60°) = 0.5 → 前方 120° 锥形
   const cam=controls.getObject().position;
   const fwd=new THREE.Vector3();camera.getWorldDirection(fwd);
   // 投影到水平面（忽略 pitch 抬头/低头），用 xz 方向判断"前方"
@@ -4066,7 +4170,7 @@ function findBestTarget(maxRange,preferFOV=false){
     if(e.hp<=0)continue;
     const d=e.mesh.position.distanceTo(cam);
     if(d>maxRange)continue;
-    // 只考虑"前方 180°"内的敌人
+    // 只考虑视野锥内的敌人
     const toXZ = new THREE.Vector3(
       e.mesh.position.x - cam.x, 0,
       e.mesh.position.z - cam.z
@@ -4074,11 +4178,11 @@ function findBestTarget(maxRange,preferFOV=false){
     if(toXZ.lengthSq()<1e-6) continue;
     toXZ.normalize();
     const dot = fwdXZ.dot(toXZ);
-    if(dot < 0) continue;             // 在身后 180°，跳过
+    if(dot < FOV_DOT) continue;     // 不在视野锥内 → 跳过
     if(d<bestAnyD){bestAnyD=d;bestAny=e;}
     if(preferFOV){
-      // 视野更窄（约前方 100°）的进一步偏好
-      if(dot>0.3 && d<bestFOVD){bestFOVD=d;bestFOV=e;}
+      // 更严格的中心视野（约 60° 锥）的进一步偏好
+      if(dot>0.85 && d<bestFOVD){bestFOVD=d;bestFOV=e;}
     }
   }
   return preferFOV ? (bestFOV||bestAny) : bestAny;
@@ -4241,6 +4345,8 @@ function drawLightning(a,b,color){
   },150);
 }
 function flashAt(pos,color,size=1.5){
+  // 性能保护：PerfMon 关闭粒子时（极低帧/低端机）跳过闪光特效，但技能本身逻辑不受影响
+  if(typeof PerfMon!=='undefined' && !PerfMon.particlesOn()) return;
   const m=new THREE.Mesh(new THREE.SphereGeometry(size,12,12),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.6}));
   m.position.copy(pos);scene.add(m);
   let t=0;const id=setInterval(()=>{t+=.05;m.scale.setScalar(1+t*2);m.material.opacity=Math.max(0,.6-t);if(t>=.6){clearInterval(id);scene.remove(m);}},20);
@@ -4267,6 +4373,19 @@ function refreshInfo(){
   document.getElementById('hpLbl').textContent=Math.ceil(player.hp)+'/'+Math.ceil(player.hpMax)+_suffix;
   document.getElementById('mpLbl').textContent=Math.ceil(player.mp)+'/'+Math.ceil(player.mpMax);
   document.getElementById('expFill').style.width=(player.exp/player.expNeed*100)+'%';
+  // 流派分布显示（属性面板内）
+  const classEl = document.getElementById('sClass');
+  if(classEl && typeof getClassMastery==='function'){
+    const m = getClassMastery();
+    const parts = CLASS_KEYS.map(k=>{
+      const cls = CLASS_DB[k];
+      const c = m.count[k]||0;
+      const isActive = m.active===k;
+      return `<span style="color:${c>0?cls.color:'#666'};font-weight:${isActive?'bold':'normal'}${isActive?';text-shadow:0 0 6px '+cls.color:''}">${cls.icon}${c}</span>`;
+    }).join(' / ');
+    const masteryLabel = m.active ? `<span style="color:${CLASS_DB[m.active].color};font-size:11px;margin-left:6px">★ ${CLASS_DB[m.active].name}精通</span>` : '';
+    classEl.innerHTML = parts + masteryLabel;
+  }
   syncUiShow();
 }
 function refreshSkillBar(){
@@ -4475,6 +4594,11 @@ function itemTipHtml(it, title){
     return html;
   }
   html+=`<div style="color:#888">${it.quality.name} · iLvl ${it.iLvl} · ${SLOT_CN[it.slot]||it.slot}</div>`;
+  // 流派标签：醒目色彩条
+  if(it.classTag && CLASS_DB[it.classTag]){
+    const cls = CLASS_DB[it.classTag];
+    html+=`<div style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px">${cls.icon} ${cls.name}流派</div>`;
+  }
   if(it.dmgMin)html+=`<div>伤害 ${it.dmgMin}-${it.dmgMax}</div>`;
   if(it.armor)html+=`<div>护甲 +${it.armor}</div>`;
   it.affixes.forEach(a=>html+=`<div style="color:var(--blue)">${a.label}</div>`);
@@ -4518,10 +4642,87 @@ function itemTipHtml(it, title){
   return html;
 }
 
+// 装备对比摘要：返回顶部 highlight box，只列变化最大的 3-5 行核心数值
+// 设计目标：玩家一眼就能看出"这件装备换上后强了多少 / 哪些属性涨/降"
+// 仅在 a (新装备 ≠ cur 已装备)、同 slot 时使用
+function itemCompareSummary(it, cur){
+  if(!it || !it.slot || it.special || it.isGem) return '';
+  // 计算关键数值
+  const ait = {
+    dmgMin: it.dmgMin||0, dmgMax: it.dmgMax||0,
+    armor: it.armor||0, dmgPct: 0, critChance: 0, critDmg: 0,
+    lifeOnHit:0, hpMax:0, str:0, dex:0, int:0,
+  };
+  const acur = cur ? {
+    dmgMin: cur.dmgMin||0, dmgMax: cur.dmgMax||0,
+    armor: cur.armor||0, dmgPct: 0, critChance: 0, critDmg: 0,
+    lifeOnHit:0, hpMax:0, str:0, dex:0, int:0,
+  } : null;
+  // 把 affixes 累计进各自 obj（含宝石）
+  function accumulate(obj, target){
+    if(!obj) return;
+    (obj.affixes||[]).forEach(a=>{ if(target[a.k]!=null) target[a.k]+=a.v; });
+    (obj.gems||[]).forEach(g=>{ if(g && target[g.statKey]!=null) target[g.statKey]+=g.statValue; });
+  }
+  accumulate(it, ait);
+  if(cur) accumulate(cur, acur);
+  // 评分
+  const sNew = Math.round(itemScore(it));
+  const sCur = cur ? Math.round(itemScore(cur)) : 0;
+  // 词条 → 文案 + 颜色
+  const ROWS = [
+    {key:'dmg',  label:'伤害',   compute:(o)=> (o.dmgMin+o.dmgMax)/2, fmt:(v)=>v.toFixed(0)},
+    {key:'armor',label:'护甲',   compute:(o)=> o.armor,                fmt:(v)=>v.toFixed(0)},
+    {key:'dmgPct',label:'伤害%', compute:(o)=> o.dmgPct,               fmt:(v)=>v.toFixed(0)+'%'},
+    {key:'critChance',label:'暴击率', compute:(o)=> o.critChance,      fmt:(v)=>v.toFixed(0)+'%'},
+    {key:'critDmg',label:'暴伤',  compute:(o)=> o.critDmg,             fmt:(v)=>v.toFixed(0)+'%'},
+    {key:'lifeOnHit',label:'命中回血', compute:(o)=> o.lifeOnHit,      fmt:(v)=>v.toFixed(0)},
+    {key:'hpMax',label:'生命',    compute:(o)=> o.hpMax,               fmt:(v)=>v.toFixed(0)},
+    {key:'str',  label:'力量',    compute:(o)=> o.str,                 fmt:(v)=>v.toFixed(0)},
+    {key:'dex',  label:'敏捷',    compute:(o)=> o.dex,                 fmt:(v)=>v.toFixed(0)},
+    {key:'int',  label:'智力',    compute:(o)=> o.int,                 fmt:(v)=>v.toFixed(0)},
+  ];
+  const lines = [];
+  for(const r of ROWS){
+    const newV = r.compute(ait);
+    const curV = acur ? r.compute(acur) : 0;
+    if(newV===0 && curV===0) continue;
+    const d = newV - curV;
+    if(Math.abs(d) < 0.5 && newV===0) continue;
+    const arrow = d>0.5 ? `<span style="color:#7bd96a">↑+${r.fmt(d)}</span>`
+                : d<-0.5 ? `<span style="color:#ff7070">↓${r.fmt(d)}</span>`
+                : `<span style="color:#888">—</span>`;
+    lines.push(`<div style="display:flex;justify-content:space-between;font-size:12px;line-height:1.55">`+
+               `<b style="color:#ddd">${r.label}</b>`+
+               `<span><span style="color:#888">${r.fmt(curV)} → </span><b style="color:#fff">${r.fmt(newV)}</b>　${arrow}</span>`+
+               `</div>`);
+    if(lines.length>=6) break;   // 控制最多 6 行
+  }
+  // 评分行（核心）
+  const scoreLine = `<div style="display:flex;justify-content:space-between;font-size:13px;line-height:1.55;margin-top:4px;padding-top:4px;border-top:1px solid #3a2f18">`+
+                    `<b style="color:var(--gold)">评分</b>`+
+                    `<span><b style="color:#fff">${sCur}</b><span style="color:#888"> → </span><b style="color:var(--gold)">${sNew}</b></span>`+
+                    `</div>`;
+  if(lines.length===0 && !cur){
+    // 新装备且无对比 → 仍显示评分 + 提示
+    return `<div class="cmpSummary" style="margin:6px -2px 8px;padding:8px 10px;background:rgba(232,196,90,.08);border:1px solid #6b5a2b;border-radius:5px">`+
+           scoreLine + `</div>`;
+  }
+  if(lines.length===0) return '';
+  return `<div class="cmpSummary" style="margin:6px -2px 8px;padding:8px 10px;background:rgba(232,196,90,.08);border:1px solid #6b5a2b;border-radius:5px">`+
+         lines.join('') + scoreLine + `</div>`;
+}
+
 function showTip(it,x,y){
   // 合成面板打开时不要显示物品 tip，避免遮挡
   if(fusePanelEl && fusePanelEl.style.display==='flex'){ hideTip(); return; }
-  tipEl.innerHTML=itemTipHtml(it);
+  // 桌面/手柄模式：tip 顶部加属性对比摘要（与触屏分支保持视觉一致）
+  let _summaryPrefix = '';
+  if(it && it.slot && !it.isGem && !it.special){
+    const _curEq = player.equip[it.slot];
+    _summaryPrefix = itemCompareSummary(it, _curEq);
+  }
+  tipEl.innerHTML = _summaryPrefix + itemTipHtml(it);
   // 先让 tip 显示出来才能测量真实尺寸
   tipEl.style.display='block';
   tipEl.style.left='-9999px';   // 临时隐藏出屏幕，避免一帧闪烁
@@ -4539,21 +4740,24 @@ function showTip(it,x,y){
     tipEl.style.left = ((innerWidth - w)/2) + 'px';
     tipEl.style.top  = '4vh';
     tipEl.style.bottom = '100px';   // 留 100px 给 fixed 按钮区
-    // 把 itemTipHtml 内容包进可滚动子 div（tipEl 自身不滚）
-    const innerHtml = itemTipHtml(it);
+    // 顶部摘要 + itemTipHtml 内容包进可滚动子 div（tipEl 自身不滚）
+    const curEq = (it.slot && !it.isGem && !it.special) ? player.equip[it.slot] : null;
+    const summary = (it.slot && !it.isGem && !it.special) ? itemCompareSummary(it, curEq) : '';
+    const innerHtml = summary + itemTipHtml(it);
     tipEl.innerHTML = `<div class="tipScroll" style="height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px">${innerHtml}</div>`;
     const scrollBox = tipEl.querySelector('.tipScroll');
     // 对比当前同槽装备：拼到 tipScroll 末尾
     const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
-      const better = itemScore(it) > itemScore(cur);
+      const sCur = Math.round(itemScore(cur));
+      const sNew = Math.round(itemScore(it));
       const html =
         `<div style="margin:10px -10px 8px;padding:6px 10px;`+
-        `background:linear-gradient(90deg,transparent,${better?'rgba(123,217,106,.18)':'rgba(255,112,112,.18)'},transparent);`+
-        `border-top:2px solid ${better?'#7bd96a':'#ff7070'};`+
-        `border-bottom:2px solid ${better?'#7bd96a':'#ff7070'};`+
-        `text-align:center;font-size:12px;color:${better?'#7bd96a':'#ff7070'};font-weight:bold;letter-spacing:3px">`+
-        `▼ 当前已装备 ▼  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'}`+
+        `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
+        `border-top:2px solid var(--gold);`+
+        `border-bottom:2px solid var(--gold);`+
+        `text-align:center;font-size:12px;color:var(--gold);font-weight:bold;letter-spacing:3px">`+
+        `▼ 当前已装备 ▼  评分 ${sCur} → ${sNew}`+
         `</div>`+
         itemTipHtml(cur);
       if(scrollBox) scrollBox.innerHTML += html;
@@ -4594,14 +4798,13 @@ function showTip(it,x,y){
   // 对比当前同槽装备
   const cur=it.slot ? player.equip[it.slot] : null;
   if(cur && cur!==it){
-    const better=itemScore(it)>itemScore(cur);
     tipCmpEl.innerHTML=
       `<div style="margin:-2px -8px 6px;padding:5px 8px;`+
-      `background:linear-gradient(90deg,transparent,${better?'rgba(123,217,106,.18)':'rgba(255,112,112,.18)'},transparent);`+
-      `border-top:2px solid ${better?'#7bd96a':'#ff7070'};`+
-      `border-bottom:2px solid ${better?'#7bd96a':'#ff7070'};`+
-      `text-align:center;font-size:11px;color:${better?'#7bd96a':'#ff7070'};font-weight:bold;letter-spacing:2px">`+
-      `当前已装备  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))} ${better?'↑ 更强':'↓ 更弱'}`+
+      `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
+      `border-top:2px solid var(--gold);`+
+      `border-bottom:2px solid var(--gold);`+
+      `text-align:center;font-size:11px;color:var(--gold);font-weight:bold;letter-spacing:2px">`+
+      `当前已装备  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))}`+
       `</div>`+
       itemTipHtml(cur);
     tipCmpEl.style.display='block';
@@ -5878,6 +6081,8 @@ function makeItemAtQuality(slot, level, quality){
   // 宝石孔位
   item.sockets = rollSocketCount(quality.key);
   item.gems = new Array(item.sockets).fill(null);
+  // 流派标签（warrior / mage / rogue）
+  tagItemClass(item);
   return item;
 }
 // 更新合成提示
@@ -5986,6 +6191,25 @@ function updatePotionCounts(){
   if(hpEl){ hpEl.textContent=hp; hpEl.classList.toggle('zero', hp===0); }
   if(mpEl){ mpEl.textContent=mp; mpEl.classList.toggle('zero', mp===0); }
 }
+// 背包当前分类筛选：'all' / 'equip' / 'consume' / 'gem'
+let _invCategory = 'all';
+function _itemCategory(it){
+  if(!it) return null;
+  if(it.isGem) return 'gem';
+  if(it.special) return 'consume';   // hpPotion / mpPotion / expTome / bagExpand
+  if(it.slot) return 'equip';
+  return 'equip';                     // 其他默认归装备
+}
+function setInvCategory(cat){
+  _invCategory = cat;
+  // 同步 tab 按钮高亮
+  document.querySelectorAll('#invTabBar .invTab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.cat===cat);
+  });
+  // 重建格子
+  rebuildInv();
+}
+
 function rebuildInv(){
   // 容量条
   const cap=document.getElementById('capLabel');
@@ -6002,8 +6226,20 @@ function rebuildInv(){
   // 防右键菜单
   grid.oncontextmenu = e=>{e.preventDefault(); return false;};
 
+  // 当前分类匹配的物品下标列表 + 空格子数
+  // 显示策略：先渲染匹配的物品（保留 player.inv 原下标供事件用），再补足空格子至 INV_CAP
+  const matchedIdx = [];
   for(let i=0;i<INV_CAP;i++){
-    const it=player.inv[i];
+    const it = player.inv[i];
+    if(_invCategory==='all'){ matchedIdx.push(i); continue; }
+    if(it && _itemCategory(it)===_invCategory) matchedIdx.push(i);
+  }
+  // 不足 INV_CAP 时补足空槽（用 -1 标记，不绑事件）
+  while(matchedIdx.length < INV_CAP) matchedIdx.push(-1);
+
+  for(let k=0;k<INV_CAP;k++){
+    const i = matchedIdx[k];
+    const it = i>=0 ? player.inv[i] : null;
     const d=document.createElement('div');d.className='invSlot';
     if(it){
       const newTag = it.isNew ? `<span class="newDot"></span>` : '';
@@ -6308,6 +6544,7 @@ player.equip.weapon=(()=>{
   const it=genItem(1,'weapon');
   it.wType='sword';it.skills=[...WEAPON_TYPES.sword.skills];it.dmgMin=4;it.dmgMax=8;
   it.name='生锈的短剑';it.icon='⚔';it.quality=QUALITY[0];it.affixes=[];it.atkSpd=1;
+  tagItemClass(it);   // 重新打 tag（affixes 改空后流派可能变化，但 sword → warrior 仍稳定）
   return it;
 })();
 applyEquipStats();
@@ -6443,6 +6680,14 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
 {
   const bs = document.getElementById('btnSort');
   if(bs) bs.addEventListener('click', sortInv);
+}
+// 背包分类 Tab 绑定（默认 'all' 已在 setInvCategory 体现）
+{
+  document.querySelectorAll('#invTabBar .invTab').forEach(btn=>{
+    const handler = (e)=>{ e.stopPropagation(); if(e.preventDefault) e.preventDefault(); setInvCategory(btn.dataset.cat); };
+    btn.addEventListener('click', handler);
+    btn.addEventListener('touchstart', handler, {passive:false});
+  });
 }
 {
   const sb = document.getElementById('btnSocket');
@@ -6847,6 +7092,18 @@ function update(dt){
     const _ddz = e.mesh.position.z - pp.z;
     const _eDistSq = _ddx*_ddx + _ddz*_ddz;
     const _isFar = !e.isBoss && (_eDistSq > FAR_AI_DIST_SQ);
+    // ===== LOD：远距离非 BOSS 敌人在画面外不渲染（仍参与 AI/碰撞），显著节省 GPU =====
+    // 60m 外 / 性能等级 >= 1 ：mesh.visible=false（敌人 mesh 几十-上百三角面，远敌渲染浪费）
+    // BOSS 和距离 <60m 的始终保持可见
+    const _LOD_HIDE_DIST_SQ = (PerfMon.level()>=1 ? 60*60 : 90*90);
+    if(!e.isBoss){
+      const shouldHide = _eDistSq > _LOD_HIDE_DIST_SQ;
+      if(e.mesh.visible === shouldHide ? false : true){
+        // 仅在状态变化时设置，减少 setter 调用
+      }
+      if(shouldHide && e.mesh.visible) e.mesh.visible = false;
+      else if(!shouldHide && !e.mesh.visible) e.mesh.visible = true;
+    }
     if(_isFar){
       // 远距离：累计 dt，每 0.2s 才执行一次完整 AI；其它帧只做最少状态衰减
       e._farAcc = (e._farAcc||0) + dt;
@@ -7085,9 +7342,71 @@ function update(dt){
   drawMinimap();
 }
 
+// ===================== 自适应画质（PerfMon）=====================
+// 监控帧时间：连续低帧 → 逐级降级（pixelRatio / 阴影 / 雾距 / particlesEnabled）
+// 帧率恢复 → 逐级回升。等级 0(原始) ~ 3(最简)
+const PerfMon = (function(){
+  let level = 0;                  // 当前降级等级
+  let lowAcc = 0, highAcc = 0;    // 连续低/高帧累计时长
+  let avgFrame = 16.67;           // 滑动平均帧时长 ms
+  let initial = null;             // 初始 pixelRatio/shadow/fog
+  // 触屏模式起点比 PC 更低
+  function caps(){
+    return InputMode.current==='touch'
+      ? { pr:[1.0, 0.85, 0.7, 0.55], fog:[100, 90, 75, 60], shadow:[false,false,false,false], particles:[true,true,false,false] }
+      : { pr:[devicePixelRatio||1, 1.0, 0.85, 0.7], fog:[160, 140, 120, 100], shadow:[true, true, false, false], particles:[true,true,true,false] };
+  }
+  function applyLevel(L){
+    if(!renderer) return;
+    const c = caps();
+    L = Math.max(0, Math.min(3, L));
+    try{ renderer.setPixelRatio(c.pr[L]); }catch(_){}
+    try{ renderer.shadowMap.enabled = c.shadow[L]; }catch(_){}
+    if(scene && scene.fog){ scene.fog.far = c.fog[L]; }
+    window._perfParticlesOn = c.particles[L];
+    level = L;
+  }
+  function snapshot(){
+    if(initial) return;
+    initial = {
+      pr: renderer ? renderer.getPixelRatio() : 1,
+      shadow: renderer ? renderer.shadowMap.enabled : false,
+      fog: scene && scene.fog ? scene.fog.far : 160,
+    };
+  }
+  return {
+    tick(dt){
+      if(!renderer) return;
+      snapshot();
+      const ms = dt*1000;
+      // 滑动平均（α=0.1）
+      avgFrame = avgFrame*0.9 + ms*0.1;
+      // < 22fps = 45ms：紧急降级；< 35fps = 28.5ms：累计降级；> 55fps = 18.18ms：累计升级
+      if(avgFrame > 28.5){ lowAcc += dt; highAcc = 0; }
+      else if(avgFrame < 18.18){ highAcc += dt; lowAcc = 0; }
+      else { lowAcc *= 0.95; highAcc *= 0.95; }
+      // 连续 1.0s 低帧 → 降级
+      if(lowAcc > 1.0 && level < 3){
+        applyLevel(level+1);
+        lowAcc = 0;
+        if(typeof toast==='function') toast(`📉 画质降级 L${level}（卡顿优化）`);
+      }
+      // 连续 3.5s 高帧 → 升级（更保守，避免反复抖动）
+      if(highAcc > 3.5 && level > 0){
+        applyLevel(level-1);
+        highAcc = 0;
+        if(typeof toast==='function') toast(`📈 画质回升 L${level}`);
+      }
+    },
+    level(){ return level; },
+    particlesOn(){ return window._perfParticlesOn !== false; },
+  };
+})();
+
 function loop(){
   try{
     const dt=Math.min(.05,clock.getDelta());
+    PerfMon.tick(dt);   // 自适应画质：低帧降级、回升时复原
     if(gamePaused){
       // 暂停状态下也轮询手柄，让 Start / Y / B / 背包导航仍然有效
       const padIn = pollGamepad(dt);
