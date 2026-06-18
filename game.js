@@ -1689,6 +1689,378 @@ const SKILL_DB={
   barrier:{name:'守护护盾',ico:'🛡',cd:12,mp:30,range:0,type:'shield',shield:[80,120],dur:8,color:0x6ad6ff,desc:'生成可吸收伤害的护盾，持续数秒抵挡攻击。'},
   warcry:{name:'铁壁姿态',ico:'🪖',cd:16,mp:20,range:0,type:'haste',reduce:0.4,dur:6,color:0xe8c45a,desc:'进入坚毅姿态，短时间内大幅降低受到的伤害。'},
 };
+// ===================== 升级能力池（建议1：经验满后N选1）=====================
+// 每次升级时，从池中随机抽取3个能力供玩家选择
+// type: newSkill=新技能, extraProj=额外投射物, aoeUp=AOE扩大, cdRed=CD缩短,
+//       dmgUp=伤害提升, defUp=防御提升, healUp=回复提升, aura=被动光环, special=特殊机制
+const ABILITY_POOL = [
+  // ---- 新技能（获得一个主动技能）----
+  {id:'sk_meteor',   name:'陨石术',     ico:'☄', type:'newSkill',  skill:'meteor',  rarity:2, desc:'获得「陨石术」：召唤陨石轰炸区域，造成高额爆发伤害。'},
+  {id:'sk_chain',    name:'闪电链',     ico:'⚡', type:'newSkill',  skill:'chain',   rarity:2, desc:'获得「闪电链」：闪电在多个敌人间跳跃伤害。'},
+  {id:'sk_nova',     name:'冰霜新星',   ico:'✦', type:'newSkill',  skill:'nova',    rarity:2, desc:'获得「新星」：以自身为中心爆发冲击波，击退周身敌人。'},
+  {id:'sk_fireball', name:'火球术',     ico:'🔥', type:'newSkill',  skill:'fireball', rarity:1, desc:'获得「火球术」：射出火球，命中后爆炸造成范围火焰伤害。'},
+  {id:'sk_arrow',    name:'多重射击',   ico:'🏹', type:'newSkill',  skill:'arrow',   rarity:1, desc:'获得「多重射击」：一次射出多支箭矢呈扇形覆盖。'},
+  {id:'sk_iceshard', name:'冰晶术',     ico:'❄', type:'newSkill',  skill:'iceshard',rarity:1, desc:'获得「冰晶术」：发射冰晶贯穿目标，减速敌人。'},
+  {id:'sk_heal',     name:'治疗术',     ico:'✚', type:'newSkill',  skill:'heal',    rarity:1, desc:'获得「治疗术」：立即恢复一定生命值。'},
+  {id:'sk_barrier',  name:'守护护盾',   ico:'🛡', type:'newSkill',  skill:'barrier', rarity:1, desc:'获得「守护护盾」：生成可吸收伤害的护盾。'},
+
+  // ---- 技能强化（强化已有技能）----
+  {id:'ex_proj1',  name:'额外投射物+1', ico:'🎯', type:'skillBuff', buff:'extraProj', val:1, rarity:2, desc:'所有远程技能额外+1发投射物。'},
+  {id:'ex_aoe20',  name:'AOE范围+20%',   ico:'💥', type:'skillBuff', buff:'aoeScale',  val:0.2, rarity:1, desc:'所有AOE技能范围+20%。'},
+  {id:'ex_cd15',   name:'冷却缩短15%',    ico:'⏱', type:'skillBuff', buff:'cdRed',     val:0.15,rarity:2, desc:'所有技能冷却时间-15%。'},
+  {id:'ex_dmg20',  name:'技能伤害+20%',   ico:'⚔', type:'skillBuff', buff:'dmgScale',  val:0.2, rarity:2, desc:'所有技能伤害+20%。'},
+  {id:'ex_orb3',   name:'环绕飞球+3',     ico:'🔮', type:'skillBuff', buff:'orbCount',  val:3,   rarity:3, desc:'获得3颗环绕飞球，自动攻击周围敌人。'},
+
+  // ---- 属性强化 ----
+  {id:'af_str',    name:'力量+15',      ico:'💪', type:'statUp', stat:'str',        val:15, rarity:1, desc:'力量+15，提升物理伤害和护甲。'},
+  {id:'af_dex',    name:'敏捷+15',      ico:'🏃', type:'statUp', stat:'dex',        val:15, rarity:1, desc:'敏捷+15，提升暴击率和移动速度。'},
+  {id:'af_int',    name:'智力+15',      ico:'🧠', type:'statUp', stat:'int',        val:15, rarity:1, desc:'智力+15，提升技能伤害和法力上限。'},
+  {id:'af_hp',     name:'最大生命+80',   ico:'❤', type:'statUp', stat:'hpMax',      val:80, rarity:1, desc:'最大生命值+80。'},
+  {id:'af_dmgPct', name:'伤害+12%',     ico:'⚔', type:'statUp', stat:'dmgPct',    val:12, rarity:2, desc:'所有伤害+12%。'},
+  {id:'af_crit',   name:'暴击率+8%',    ico:'💥', type:'statUp', stat:'critChance',val:8,  rarity:2, desc:'暴击率+8%。'},
+  {id:'af_critDmg',name:'暴击伤害+30%', ico:'🔥', type:'statUp', stat:'critDmg',   val:30, rarity:2, desc:'暴击伤害+30%。'},
+
+  // ---- 被动光环 ----
+  {id:'au_thorns',  name:'荆棘光环',    ico:'🌹', type:'aura', aura:'thorns',  val:15, rarity:2, desc:'每5秒对周围敌人造成15点反伤。'},
+  {id:'au_life',    name:'生命汲取',     ico:'🩸', type:'aura', aura:'lifeOnHit',val:3,  rarity:2, desc:'每次命中敌人回复3点生命。'},
+  {id:'au_armor',   name:'石肤术',      ico:'🪨', type:'aura', aura:'armor',   val:30, rarity:1, desc:'护甲+30，持续本局。'},
+  {id:'au_speed',   name:'疾风步',      ico:'💨', type:'aura', aura:'moveSpd', val:15, rarity:1, desc:'移动速度+15%。'},
+
+  // ---- 特殊机制 ----
+  {id:'sp_revive',  name:'死亡回溯',    ico:'👼', type:'special', special:'revive',  val:1,  rarity:3, desc:'本局首次死亡时自动复活（满血）。'},
+  {id:'sp_magnet',  name:'经验磁铁',    ico:'🧲', type:'special', special:'magnet', val:5,  rarity:1, desc:'拾取范围+5米。'},
+  {id:'sp_luck',    name:'幸运儿',      ico:'🍀', type:'special', special:'luck',   val:20, rarity:1, desc:'掉落品质提升，稀有+暗金掉落率+20%。'},
+];
+// 玩家已选能力列表（存 key → 等级）
+let _playerAbilities = {};
+// 当前升级选择面板是否打开
+let _abilitySelectOpen = false;
+
+// 获取当前可选能力池（排除已选满的）
+function getAvailableAbilities(){
+  const pool = ABILITY_POOL.filter(a=>{
+    // 同类能力最多叠3级（用id前缀判断）
+    const prefix = a.id.split('_')[0]+'_'+a.id.split('_')[1];
+    const curLv = _playerAbilities[prefix] || 0;
+    return curLv < 3;
+  });
+  // 按稀有度加权随机
+  const weighted = [];
+  pool.forEach(a=>{
+    let w = 1;
+    if(a.rarity===1) w = 50;
+    else if(a.rarity===2) w = 25;
+    else w = 8;
+    for(let i=0;i<w;i++) weighted.push(a);
+  });
+  // 随机抽3个
+  const picks = [];
+  const used = new Set();
+  for(let i=0;i<3 && weighted.length>0;i++){
+    const idx = Math.floor(Math.random()*weighted.length);
+    const a = weighted[idx];
+    if(used.has(a.id)){ weighted.splice(idx,1); continue; }
+    used.add(a.id);
+    picks.push({...a});
+  }
+  return picks;
+}
+
+// 应用选中的能力
+function applyAbility(ability){
+  const prefix = ability.id.split('_')[0]+'_'+ability.id.split('_')[1];
+  _playerAbilities[prefix] = (_playerAbilities[prefix]||0) + 1;
+  const lv = _playerAbilities[prefix];
+
+  switch(ability.type){
+    case 'newSkill':
+      if(ability.skill && SKILL_DB[ability.skill]){
+        const have = player.skills.some(s=>s.key===ability.skill);
+        if(!have){
+          player.skills.push({key:ability.skill, ...SKILL_DB[ability.skill], cdLeft:0});
+          if(player.skills.length>8) player.skills.length=8;
+          refreshSkillBar();
+          toast(`获得技能：${ability.name}`);
+        } else {
+          // 已有该技能，降低其CD作为补偿
+          const sk = player.skills.find(s=>s.key===ability.skill);
+          if(sk) sk.cd = Math.max(0.3, sk.cd*0.85);
+          toast(`${ability.name} CD缩短！`);
+        }
+      }
+      break;
+    case 'skillBuff':
+      if(!player._skillBuffs) player._skillBuffs = {};
+      if(!player._skillBuffs[ability.buff]) player._skillBuffs[ability.buff] = 0;
+      player._skillBuffs[ability.buff] += ability.val * lv; // 叠加
+      toast(`${ability.name}（Lv${lv}）`);
+      break;
+    case 'statUp':
+      if(!player._abilityStats) player._abilityStats = {};
+      if(!player._abilityStats[ability.stat]) player._abilityStats[ability.stat] = 0;
+      player._abilityStats[ability.stat] += ability.val;
+      applyEquipStats();
+      toast(`${ability.name}（Lv${lv}）`);
+      break;
+    case 'aura':
+      if(!player._auras) player._auras = {};
+      player._auras[ability.aura] = (player._auras[ability.aura]||0) + ability.val;
+      toast(`${ability.name}（Lv${lv}）`);
+      break;
+    case 'special':
+      if(!player._specials) player._specials = {};
+      player._specials[ability.special] = (player._specials[ability.special]||0) + ability.val;
+      if(ability.special==='revive') player._reviveUsed = false;
+      toast(`${ability.name}！`);
+      break;
+  }
+  // 存档能力选择（读档时恢复）
+  player._savedAbilities = {..._playerAbilities};
+}
+
+// 显示能力选择面板
+function showAbilitySelectPanel(){
+  const picks = getAvailableAbilities();
+  if(picks.length===0){
+    // 没有可选能力了，直接继续
+    hideAbilitySelectPanel();
+    return;
+  }
+  _abilitySelectOpen = true;
+  gamePaused = true;
+
+  let html = `<div style="padding:16px 18px 10px;text-align:center">
+    <div style="font-size:20px;color:var(--gold);letter-spacing:3px;margin-bottom:4px">★ 等级提升 ★</div>
+    <div style="font-size:13px;color:#aaa;margin-bottom:14px">选择一项能力（${picks.length}选1）</div>
+  </div>`;
+  picks.forEach((a,i)=>{
+    const rarityColor = a.rarity===3?'#e8c45a':a.rarity===2?'#f4e26b':'#5aa6ff';
+    html += `<div class="abilCard" data-idx="${i}" style="
+      margin:0 18px 10px;padding:14px 16px;
+      background:linear-gradient(135deg,#1a1408,#0f0c08);
+      border:2px solid ${rarityColor};border-radius:8px;
+      cursor:pointer;text-align:left;
+      transition:all .12s ease;
+      ">
+      <div style="font-size:16px;color:${rarityColor};margin-bottom:4px">${a.ico} ${a.name}</div>
+      <div style="font-size:12px;color:#bbb;line-height:1.5">${a.desc}</div>
+    </div>`;
+  });
+  // 手机：底部加"跳过"按钮（可选）
+  html += `<div style="text-align:center;padding:6px 0 14px">
+    <button id="abilSkipBtn" style="padding:8px 28px;background:rgba(255,255,255,.08);border:1px solid #555;border-radius:5px;color:#888;font-size:13px;cursor:pointer">跳过本次选择</button>
+  </div>`;
+
+  const panel = document.getElementById('abilitySelectPanel');
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+
+  // 绑定卡片点击
+  panel.querySelectorAll('.abilCard').forEach(card=>{
+    const idx = +card.getAttribute('data-idx');
+    const handler = (e)=>{
+      e.stopPropagation();
+      const a = picks[idx];
+      if(!a) return;
+      applyAbility(a);
+      hideAbilitySelectPanel();
+    };
+    card.addEventListener('click', handler);
+    card.addEventListener('touchend', (e)=>{ e.preventDefault(); handler(e); }, {passive:false});
+    // 悬停效果
+    card.addEventListener('mouseenter', ()=>{ card.style.background='linear-gradient(135deg,#2a1f10,#151008)'; card.style.borderColor='var(--gold)'; });
+    card.addEventListener('mouseleave', ()=>{ card.style.background=''; card.style.borderColor=''; });
+  });
+  // 跳过按钮
+  const skipBtn = document.getElementById('abilSkipBtn');
+  if(skipBtn){
+    skipBtn.addEventListener('click', ()=> hideAbilitySelectPanel());
+    skipBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); hideAbilitySelectPanel(); }, {passive:false});
+  }
+}
+
+function hideAbilitySelectPanel(){
+  const panel = document.getElementById('abilitySelectPanel');
+  if(panel) panel.style.display = 'none';
+  _abilitySelectOpen = false;
+  gamePaused = false;
+}
+// ===================== 能力池结束 =====================
+
+// 渲染能力面板（Tab 键 / 手机按钮打开时调用）
+function renderAbilityPanel(){
+  const body = document.getElementById('abilPanelBody');
+  if(!body) return;
+  let html = '';
+  const prefixes = Object.keys(_playerAbilities);
+  if(prefixes.length === 0){
+    html = '<div style="color:#888;padding:20px;text-align:center">尚未选择任何能力<br/><span style="font-size:11px;color:#666">升级后暂停，从 3 个选项中选择能力</span></div>';
+  } else {
+    // 统计总加成
+    let totalDmgPct = 0, totalCrit = 0, totalCDR = 0, totalAOE = 0, totalExtraProj = 0;
+    let auraLines = [];
+    let newSkills = [];
+
+    prefixes.forEach(prefix => {
+      const lv = _playerAbilities[prefix];
+      const ab = ABILITY_POOL.find(a => {
+        const p = a.id.split('_')[0]+'_'+a.id.split('_')[1];
+        return p === prefix;
+      });
+      if(!ab) return;
+
+      const rarityColor = ab.rarity===3?'#e8c45a':ab.rarity===2?'#f4e26b':'#5aa6ff';
+      let currentVal = ab.val * lv;
+      let effectText = '';
+
+      switch(ab.type){
+        case 'newSkill':
+          newSkills.push(ab.name);
+          effectText = `主动技能已激活`;
+          break;
+        case 'skillBuff':
+          if(ab.buff==='dmgScale'){ totalDmgPct += ab.val*100*lv; effectText = `技能伤害 +${(ab.val*100*lv).toFixed(0)}%`; }
+          else if(ab.buff==='cdRed'){ totalCDR += ab.val*100*lv; effectText = `冷却缩短 ${(ab.val*100*lv).toFixed(0)}%`; }
+          else if(ab.buff==='aoeScale'){ totalAOE += ab.val*100*lv; effectText = `AOE 范围 +${(ab.val*100*lv).toFixed(0)}%`; }
+          else if(ab.buff==='extraProj'){ totalExtraProj += currentVal; effectText = `额外投射物 +${currentVal}`; }
+          else if(ab.buff==='orbCount'){ effectText = `环绕飞球 +${currentVal}`; }
+          break;
+        case 'statUp':
+          effectText = `+${currentVal} ${ab.stat}`;
+          break;
+        case 'aura':
+          auraLines.push(`${ab.ico} ${ab.name}（Lv${lv}）`);
+          effectText = ab.desc;
+          break;
+        case 'special':
+          effectText = ab.desc;
+          break;
+      }
+
+      html += `<div class="abilRow" style="margin:6px 10px;padding:10px 14px;
+        background:linear-gradient(135deg,#151008,#0f0c08);
+        border:1px solid ${rarityColor}33;
+        border-left:3px solid ${rarityColor};
+        border-radius:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:14px;color:${rarityColor}">${ab.ico} ${ab.name}</div>
+          <div style="font-size:11px;color:#888">Lv${lv}/3</div>
+        </div>
+        <div style="font-size:12px;color:#bbb;line-height:1.5">${effectText}</div>
+      </div>`;
+    });
+
+    // 汇总行
+    let summary = '';
+    if(totalDmgPct>0) summary += `⚔ 技能伤害 +${totalDmgPct.toFixed(0)}%　`;
+    if(totalCDR>0) summary += `⏱ CD缩短 ${totalCDR.toFixed(0)}%　`;
+    if(totalAOE>0) summary += `💥 AOE +${totalAOE.toFixed(0)}%　`;
+    if(totalExtraProj>0) summary += `🎯 额外弹 +${totalExtraProj}　`;
+    if(newSkills.length>0) summary += `✨ 新技能：${newSkills.join('、')}　`;
+    if(auraLines.length>0) summary += `<br/>🛡 光环：${auraLines.join(' · ')}`;
+
+    if(summary){
+      html += `<div style="margin:10px 10px 4px;padding:8px 12px;
+        background:rgba(232,196,90,.06);border:1px solid rgba(232,196,90,.2);
+        border-radius:6px;font-size:12px;color:#e8c45a;line-height:1.8">${summary}</div>`;
+    }
+  }
+  body.innerHTML = html;
+}
+
+// 应用能力光环效果（每帧调用）
+function updateAuras(dt){
+  if(!player._auras) return;
+  const pp = controls.getObject().position;
+  // 荆棘光环：每5秒对周围敌人造成伤害
+  if(player._auras.thorns){
+    player._thornsTimer = (player._thornsTimer || 0) + dt;
+    if(player._thornsTimer >= 5){
+      player._thornsTimer = 0;
+      const range = 5;
+      enemies.forEach(e=>{
+        if(e.hp<=0) return;
+        if(e.mesh.position.distanceTo(pp) <= range){
+          const dmg = player._auras.thorns;
+          damageEnemy(e, {dmg, crit:false});
+          const wp = e.mesh.position.clone(); wp.y += 2;
+          spawnDmgText(wp, dmg, false);
+        }
+      });
+    }
+  }
+}
+
+// 环绕飞球更新（orbCount 能力）
+function updateOrbs(dt){
+  const orbCount = (player._skillBuffs && player._skillBuffs.orbCount) || 0;
+  if(orbCount <= 0){
+    // 没有飞球，清理残留
+    if(player._orbs && player._orbs.length > 0){
+      player._orbs.forEach(o=>{ if(o.mesh) scene.remove(o.mesh); });
+      player._orbs = [];
+    }
+    return;
+  }
+  // 初始化飞球
+  if(!player._orbs) player._orbs = [];
+  const orbColor = 0x5aa6ff;
+  const orbRadius = 2.5; // 环绕半径
+  // 补齐飞球数量
+  while(player._orbs.length < orbCount){
+    const idx = player._orbs.length;
+    const angle = (idx / orbCount) * Math.PI * 2;
+    const geo = new THREE.SphereGeometry(0.18, 12, 12);
+    const mat = new THREE.MeshBasicMaterial({color:orbColor, transparent:true, opacity:0.85});
+    const mesh = new THREE.Mesh(geo, mat);
+    // 光晕
+    const glowGeo = new THREE.SphereGeometry(0.32, 8, 8);
+    const glowMat = new THREE.MeshBasicMaterial({color:orbColor, transparent:true, opacity:0.25});
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    mesh.add(glow);
+    scene.add(mesh);
+    player._orbs.push({
+      mesh, angle, cdTimer: idx*0.4, cdMax: 1.8, // 错开开局射击时间
+      target: null
+    });
+  }
+  // 更新飞球位置 + 自动攻击
+  const pp = controls.getObject().position;
+  player._orbs.forEach((ob, idx)=>{
+    // 环绕运动
+    ob.angle += dt * 2.5; // 角速度
+    const x = pp.x + Math.cos(ob.angle) * orbRadius;
+    const z = pp.z + Math.sin(ob.angle) * orbRadius;
+    ob.mesh.position.set(x, pp.y + 1.2, z);
+    // 脉冲缩放
+    const pulse = 1 + Math.sin(performance.now()*0.006 + idx) * 0.15;
+    ob.mesh.scale.setScalar(pulse);
+    // 冷却计时
+    ob.cdTimer -= dt;
+    if(ob.cdTimer <= 0){
+      // 找最近敌人
+      let nearest = null, nearestD = 12;
+      enemies.forEach(e=>{
+        if(e.hp<=0) return;
+        const d = e.mesh.position.distanceTo(ob.mesh.position);
+        if(d < nearestD){ nearestD = d; nearest = e; }
+      });
+      if(nearest && nearestD < 12){
+        // 发射飞弹
+        const dir = nearest.mesh.position.clone().setY(1.5).sub(ob.mesh.position).normalize();
+        shootProjectile({
+          origin: ob.mesh.position.clone(),
+          dir, color: orbColor, range: 14, speed: 28, scale: 0.12, kind: 'orb',
+          hit: e=>{ damageEnemy(e, {dmg:Math.round(8+player.level*1.5), crit:false}); }
+        });
+        ob.cdTimer = ob.cdMax;
+      } else {
+        ob.cdTimer = 0.3; // 没目标时快速重试
+      }
+    }
+  });
+}
+
 const WEAPON_TYPES={
   sword:{skills:['swing','thrust'],atkSpd:1,base:[6,10]},
   axe:{skills:['swing'],atkSpd:.85,base:[10,16]},
@@ -2318,11 +2690,22 @@ function applyEquipStats(){
   player._setCount=setCount;
   player._activeSetBonuses=activeSetBonuses;
   player._eq=stats;
-  player._strTotal=player.str+stats.str;
-  player._dexTotal=player.dex+stats.dex;
-  player._intTotal=player.int+stats.int;
-  player.armor=stats.armor;
-  const newHpMax=80+player.level*15+player._strTotal*2+stats.hpMax;
+  // 能力 statUp 加成（力量/敏捷/智力/HP/暴击等）
+  const _abStats = player._abilityStats || {};
+  const abStr = _abStats.str||0, abDex = _abStats.dex||0, abInt = _abStats.int||0;
+  const abHpMax = _abStats.hpMax||0;
+  const abDmgPct = _abStats.dmgPct||0;
+  const abCrit = _abStats.critChance||0;
+  const abCritDmg = _abStats.critDmg||0;
+  player._strTotal = player.str + stats.str + abStr;
+  player._dexTotal = player.dex + stats.dex + abDex;
+  player._intTotal = player.int + stats.int + abInt;
+  player.armor = stats.armor + (_abStats.armor||0);
+  // 把能力的百分比加成也写进 _eq，让伤害/暴击公式能读到
+  player._eq.dmgPct  = (player._eq.dmgPct||0) + abDmgPct;
+  player._eq.critChance = (player._eq.critChance||0) + abCrit;
+  player._eq.critDmg = (player._eq.critDmg||0) + abCritDmg;
+  const newHpMax=80+player.level*15+player._strTotal*2+stats.hpMax+abHpMax;
   const newMpMax=30+player.level*8+player._intTotal*2+stats.mpMax;
   player.hp=Math.min(player.hp/player.hpMax*newHpMax,newHpMax);
   player.mp=Math.min(player.mp/player.mpMax*newMpMax,newMpMax);
@@ -3188,12 +3571,11 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   const def=ENEMY_TYPES[type];
   const mesh=makeEnemyMesh(type);
   mesh.position.copy(pos);scene.add(mesh);
-  // 数值成长曲线：HP 随 wave 指数级增长，伤害线性增长
-  // level 1: ×1.0；level 5: ×2.4；level 10: ×4.6；level 20: ×11.7
-  const hpScale  = 1 + level*0.30 + level*level*0.015;
-  const dmgScale = 1 + level*0.18 + level*level*0.005;
+  // 数值成长曲线：前5波线性慢增长，5波后指数加快，避免前期压力过大
+  const hpScale  = 1 + level*0.20 + Math.max(0,level-5)*level*0.018;
+  const dmgScale = 1 + level*0.10 + Math.max(0,level-5)*level*0.006;
   // 难度加成：每提升 1 难度，HP/伤害额外 ×1.5
-  const diffMul = 1 + (difficulty-1)*0.5;
+  const diffMul = 1 + (difficulty-1)*0.35;
   const hpMax=Math.floor(def.hp * hpScale * diffMul * (isElite?2.5:1) * (isBoss?12:1));
   const e={
     type,def,mesh,hpMax,hp:hpMax,level,isElite,isBoss,
@@ -3842,6 +4224,9 @@ function shootProjectile(opts){
   projectiles.push({mesh:m,dir:dir.clone().normalize(),speed,dmg,life,range,traveled:0,pierce,hits:new Set(),hit});
 }
 function spawnAoe(pos,radius,dmgFn,color=0xff8030,dur=.4){
+  // 能力buff：AOE范围扩大
+  const aoeScale = 1 + ((player._skillBuffs&&player._skillBuffs.aoeScale)||0);
+  radius *= aoeScale;
   const ring=new THREE.Mesh(new THREE.CircleGeometry(radius,32),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.55,side:THREE.DoubleSide}));
   ring.rotation.x=-Math.PI/2;ring.position.copy(pos);ring.position.y=.05;scene.add(ring);
   enemies.forEach(e=>{if(e.hp<=0)return;if(e.mesh.position.distanceTo(pos)<=radius)damageEnemy(e,typeof dmgFn==='function'?dmgFn():dmgFn,false,pos);});
@@ -4035,6 +4420,8 @@ function dropLoot(pos,level,isElite,isBoss){
   for(let i=0;i<count;i++){
     const it=genItem(level);
     spawnLootFromItem(it, pos, true);
+    // 装备掉落提示（建议2）
+    showLootToast(it);
   }
   // ===== 宝石掉落 =====
   // 普通 4%、精英 16%、BOSS 必掉 1 颗（v0.23.3 提高宝石掉率）
@@ -4130,7 +4517,9 @@ function calcPlayerDamage(skill){
   if(w&&['melee','multi','pierce'].includes(skill.type)){lo+=w.dmgMin*.5;hi+=w.dmgMax*.7;}
   if(['proj','aoe','nova','chain'].includes(skill.type)){lo+=player._intTotal*.4;hi+=player._intTotal*.7;}
   else {lo+=player._strTotal*.4;hi+=player._strTotal*.6;}
-  let dmg=rand(lo,hi);
+  // 能力buff：伤害提升
+  const dmgScale = 1 + ((player._skillBuffs&&player._skillBuffs.dmgScale)||0);
+  let dmg=rand(lo,hi) * dmgScale;
   const eq=player._eq||{};
   dmg*=1+(eq.dmgPct||0)/100;
   // 元素伤害加成（按技能 key 粗略匹配）
@@ -4138,7 +4527,9 @@ function calcPlayerDamage(skill){
   if((sk==='fireball'||sk==='meteor')   && eq.fireDmg)  dmg *= 1+eq.fireDmg/100;
   if((sk==='iceshard' ||sk==='nova')     && eq.iceDmg)   dmg *= 1+eq.iceDmg/100;
   if((sk==='chain'    ||sk==='lightning')&& eq.lightDmg) dmg *= 1+eq.lightDmg/100;
-  const isCrit=Math.random()*100<((eq.critChance||0)+5);
+  // 能力buff：额外暴击率
+  const bonusCrit = (player._skillBuffs&&player._skillBuffs.critChance)||0;
+  const isCrit=Math.random()*100<((eq.critChance||0)+5+bonusCrit);
   if(isCrit)dmg*=1.5+(eq.critDmg||0)/100;
   return {dmg:Math.round(dmg),crit:isCrit};
 }
@@ -4152,7 +4543,10 @@ function damageEnemy(e,dmgRoll,fromMelee,hitPos){
   const dPlayer = e.mesh.position.distanceTo(controls.getObject().position);
   if(dPlayer<25){ if(dmgRoll.crit) Audio.crit(); else Audio.hit(); }
   const eq=player._eq||{};
+  // 装备生命汲取
   if(eq.lifeOnHit)heal(eq.lifeOnHit);
+  // 能力光环：生命汲取
+  if(player._auras && player._auras.lifeOnHit) heal(player._auras.lifeOnHit);
   if(e.hp<=0)killEnemy(e);
 }
 function killEnemy(e){
@@ -4180,17 +4574,37 @@ function gainExp(v){
   const expBonus = (player._eq && player._eq.expBonus) || 0;
   v = v * (1 + expBonus/100);
   player.exp+=Math.floor(v);
-  while(player.exp>=player.expNeed){
-    player.exp-=player.expNeed;player.level++;
-    player.expNeed=Math.floor(50*Math.pow(1.25,player.level-1));
-    player.str+=2;player.dex+=2;player.int+=2;
-    toast(`★ 升级！Lv.${player.level}`);
-    Audio.levelUp();
-    applyEquipStats();
-    player.hp=player.hpMax;player.mp=player.mpMax;
+  // 非阻塞升级：一次只升一级，弹出能力选择面板
+  if(player.exp>=player.expNeed && !_abilitySelectOpen){
+    _doOneLevelUp();
   }
   refreshInfo();
 }
+
+// 执行一次升级（非阻塞，选完能力后再检查是否还能继续升级）
+function _doOneLevelUp(){
+  if(player.exp<player.expNeed) return;
+  player.exp-=player.expNeed; player.level++;
+  player.expNeed=Math.floor(50*Math.pow(1.25,player.level-1));
+  player.str+=2; player.dex+=2; player.int+=2;
+  applyEquipStats();
+  player.hp=player.hpMax; player.mp=player.mpMax;
+  Audio.levelUp();
+  // 弹出能力选择面板（选完后在 hideAbilitySelectPanel 里继续检查下一级）
+  showAbilitySelectPanel();
+}
+
+// 关闭能力面板后，检查是否还能继续升级（经验溢出时连续升级）
+const _origHideAbilitySelectPanel = hideAbilitySelectPanel;
+hideAbilitySelectPanel = function(){
+  _origHideAbilitySelectPanel();
+  // 延迟一帧再检查，避免面板还没完全关闭就又打开
+  requestAnimationFrame(()=>{
+    if(player.exp>=player.expNeed && !_abilitySelectOpen){
+      _doOneLevelUp();
+    }
+  });
+};
 function heal(v){player.hp=Math.min(player.hpMax,player.hp+v);}
 function damagePlayer(v, source){
   if(player.invuln>0)return;
@@ -4369,8 +4783,13 @@ function castSkill(skill){
     Audio.cast_proj();
     const t=findBestTarget(skill.range,true);
     const baseDir=t?aimAt(t,origin):aimDir.clone();
-    for(let i=-1;i<=1;i++){
-      const d2=baseDir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),i*.18);
+    // 能力buff：额外投射物
+    const extraProj = (player._skillBuffs && player._skillBuffs.extraProj) || 0;
+    const totalProj = 3 + extraProj;
+    const half = Math.floor(totalProj / 2);
+    const angleStep = totalProj > 5 ? 0.13 : 0.18; // 弹数多时缩小角度间距
+    for(let i=-half;i<=half;i++){
+      const d2=baseDir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),i*angleStep);
       shootProjectile({origin,dir:d2,color:skill.color,range:skill.range,speed:42,scale:.18,kind:'arrow',
         hit:e=>damageEnemy(e,calcPlayerDamage(skill))});
     }return true;
@@ -4727,10 +5146,10 @@ function itemTipHtml(it, title){
     return html;
   }
   html+=`<div style="color:#888">${it.quality.name} · iLvl ${it.iLvl} · ${SLOT_CN[it.slot]||it.slot}</div>`;
-  // 流派标签：醒目色彩条
+  // 流派标签：醒目色彩条，点击查看精通效果
   if(it.classTag && CLASS_DB[it.classTag]){
     const cls = CLASS_DB[it.classTag];
-    html+=`<div style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px">${cls.icon} ${cls.name}流派</div>`;
+    html+=`<div class="classTagTip" data-ctag="${it.classTag}" style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px;cursor:pointer">${cls.icon} ${cls.name}流派</div>`;
   }
   if(it.dmgMin)html+=`<div>伤害 ${it.dmgMin}-${it.dmgMax}</div>`;
   if(it.armor)html+=`<div>护甲 +${it.armor}</div>`;
@@ -4856,6 +5275,29 @@ function showTip(it,x,y){
     _summaryPrefix = itemCompareSummary(it, _curEq);
   }
   tipEl.innerHTML = _summaryPrefix + itemTipHtml(it);
+  // 流派标签点击事件：显示精通效果
+  (function bindClassTagTip(){
+    const tags = tipEl.querySelectorAll('.classTagTip');
+    tags.forEach(tag=>{
+      const handler = (e)=>{
+        e.stopPropagation();
+        const ckey = tag.getAttribute('data-ctag');
+        if(!ckey || !CLASS_DB[ckey]) return;
+        const cls = CLASS_DB[ckey];
+        // 统计当前已装备的同流派数量
+        let count = 0;
+        ['weapon','helm','armor','ring'].forEach(s=>{
+          const eq = player.equip[s];
+          if(eq && eq.classTag === ckey) count++;
+        });
+        const masteryInfo = cls.mastery;
+        const activeMark = count >= 4 ? ' ✅ 已激活' : ` (${count}/4)`;
+        toast(`${cls.icon} ${cls.name}流派${activeMark}\n${masteryInfo}`, 2500);
+      };
+      tag.addEventListener('click', handler);
+      tag.addEventListener('touchend', (e)=>{ e.preventDefault(); handler(e); }, {passive:false});
+    });
+  })();
   // 先让 tip 显示出来才能测量真实尺寸
   tipEl.style.display='block';
   tipEl.style.left='-9999px';   // 临时隐藏出屏幕，避免一帧闪烁
@@ -4879,22 +5321,39 @@ function showTip(it,x,y){
     const innerHtml = summary + itemTipHtml(it);
     tipEl.innerHTML = `<div class="tipScroll" style="height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px">${innerHtml}</div>`;
     const scrollBox = tipEl.querySelector('.tipScroll');
-    // 对比当前同槽装备：拼到 tipScroll 末尾
+    // 对比当前同槽装备：拼到 tipScroll 末尾（不显示冗余的"当前已装备"标题行，顶部摘要已有评分对比）
     const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
-      const sCur = Math.round(itemScore(cur));
-      const sNew = Math.round(itemScore(it));
       const html =
         `<div style="margin:10px -10px 8px;padding:6px 10px;`+
         `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
         `border-top:2px solid var(--gold);`+
         `border-bottom:2px solid var(--gold);`+
-        `text-align:center;font-size:12px;color:var(--gold);font-weight:bold;letter-spacing:3px">`+
-        `▼ 当前已装备 ▼  评分 ${sCur} → ${sNew}`+
         `</div>`+
         itemTipHtml(cur);
       if(scrollBox) scrollBox.innerHTML += html;
     }
+    // 触屏模式也需要绑定流派标签点击事件（innerHTML 在此路径才最终确定）
+    (function bindClassTagTipTouch(){
+      const tags = tipEl.querySelectorAll('.classTagTip');
+      tags.forEach(tag=>{
+        const handler = (e)=>{
+          e.stopPropagation();
+          const ckey = tag.getAttribute('data-ctag');
+          if(!ckey || !CLASS_DB[ckey]) return;
+          const cls = CLASS_DB[ckey];
+          let count = 0;
+          ['weapon','helm','armor','ring'].forEach(s=>{
+            const eq = player.equip[s];
+            if(eq && eq.classTag === ckey) count++;
+          });
+          const activeMark = count >= 4 ? ' ✅ 已激活' : ` (${count}/4)`;
+          toast(`${cls.icon} ${cls.name}流派${activeMark}\n${cls.mastery}`, 2500);
+        };
+        tag.addEventListener('click', handler);
+        tag.addEventListener('touchend', (e)=>{ e.preventDefault(); handler(e); }, {passive:false});
+      });
+    })();
     tipCmpEl.style.display='none';
     return;
   }
@@ -4928,7 +5387,7 @@ function showTip(it,x,y){
   ty = Math.max(4, Math.min(ty, innerHeight - th - 4));
   tipEl.style.left = tx + 'px';
   tipEl.style.top  = ty + 'px';
-  // 对比当前同槽装备
+  // 对比当前同槽装备（不显示冗余的"当前已装备"标题行）
   const cur=it.slot ? player.equip[it.slot] : null;
   if(cur && cur!==it){
     tipCmpEl.innerHTML=
@@ -4936,8 +5395,6 @@ function showTip(it,x,y){
       `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
       `border-top:2px solid var(--gold);`+
       `border-bottom:2px solid var(--gold);`+
-      `text-align:center;font-size:11px;color:var(--gold);font-weight:bold;letter-spacing:2px">`+
-      `当前已装备  评分 ${Math.round(itemScore(cur))} → ${Math.round(itemScore(it))}`+
       `</div>`+
       itemTipHtml(cur);
     tipCmpEl.style.display='block';
@@ -6663,15 +7120,87 @@ function addLootText(it){
   d.innerHTML=`<span style="color:${it.quality.color}">${it.name}</span> <span style="color:#888;font-size:11px">[${it.quality.name||''}]</span>`;
   lootWrap.appendChild(d);setTimeout(()=>d.remove(),3500);
 }
-const dmgLayer=document.getElementById('dmgLayer');
+const dmgLayer=document.getElementById('dmgNumbers');
 function spawnDmgText(worldPos,val,crit){
   const v=worldPos.clone().project(camera);if(v.z>1)return;
   const x=(v.x*.5+.5)*innerWidth,y=(-v.y*.5+.5)*innerHeight;
-  const d=document.createElement('div');d.className='dmg'+(crit?' crit':'');
-  d.style.left=x+'px';d.style.top=y+'px';d.style.color=crit?'#ffeb3b':'#fff';
-  d.textContent=(crit?'⚡':'')+Math.round(val);
-  dmgLayer.appendChild(d);setTimeout(()=>d.remove(),1000);
+  const d=document.createElement('div');
+  d.className='dmg'+(crit?' crit':'');
+  // 字号：暴击更大，数值越大字号越大
+  const absVal = Math.abs(Math.round(val));
+  const fontSize = crit ? Math.min(38, 22+Math.floor(absVal/50)) : Math.min(26, 14+Math.floor(absVal/80));
+  d.style.cssText=`position:fixed;left:${x}px;top:${y}px;z-index:19;pointer-events:none;
+    font-size:${fontSize}px;font-weight:bold;letter-spacing:1px;
+    color:${crit?'#ff3a3a':'#ffffff'};
+    text-shadow:${crit?'0 0 8px #ff0000,0 0 20px #ff5050':'0 0 4px rgba(0,0,0,.8)'};
+    font-family:Arial Black,sans-serif;
+    transition:all .9s cubic-bezier(.2,.8,.3,1);
+    opacity:1;transform:translateY(0) scale(1);
+    text-stroke:${crit?'2px #800':'0'};
+    -webkit-text-stroke:${crit?'2px #800':'0'};
+  `;
+  d.textContent=(crit?'暴击! ':'')+Math.round(val);
+  dmgLayer.appendChild(d);
+  // 向上飘 + 渐隐
+  requestAnimationFrame(()=>{
+    d.style.opacity='0';
+    d.style.transform=`translateY(-80px) scale(${crit?1.3:1.1})`;
+  });
+  setTimeout(()=>d.remove(),1100);
+  // 暴击触发屏幕震动
+  if(crit) screenShake(180, 3.5);
 }
+
+// ===== 屏幕震动（建议5）=====
+let _shakeDur=0, _shakeInt=0, _shakeOX=0;
+function screenShake(durationMs, intensity){
+  _shakeDur = Math.max(_shakeDur, durationMs/1000);
+  _shakeInt = Math.max(_shakeInt, intensity);
+}
+function updateScreenShake(dt){
+  if(_shakeDur<=0){ if(_shakeOX!==0){ camera.position.y-=_shakeOX; _shakeOX=0; } return; }
+  _shakeDur -= dt;
+  const t = _shakeDur<=0 ? 0 : _shakeDur;
+  const decay = Math.max(0, t / Math.max(0.01, screenShake._maxDur||0.3));
+  const cur = _shakeInt * decay;
+  const nx = (Math.random()-0.5)*cur*0.012;
+  const ny = (Math.random()-0.5)*cur*0.008;
+  camera.position.x += (nx - (_shakeOX||0)*0.5);
+  camera.position.y += ny;
+  _shakeOX = nx;
+  if(_shakeDur<=0){ _shakeInt=0; _shakeOX=0; }
+}
+screenShake._maxDur = 0.3;
+// ===========
+
+function showLootToast(it){
+  const el = document.getElementById('lootToast');
+  if(!el) return;
+  const score = Math.round(itemScore(it)||0);
+  const curEq = it.slot ? player.equip[it.slot] : null;
+  const curScore = curEq ? Math.round(itemScore(curEq)) : 0;
+  let arrow = '';
+  if(curEq && score > curScore) arrow = ' ⬆';
+  else if(curEq && score < curScore) arrow = ' ⬇';
+  el.textContent = `${it.icon} 获得：${it.name}　评分 ${score}${arrow}`;
+  el.style.display = 'block';
+  el.style.opacity = '1';
+  el.style.transform = 'translateX(-50%) translateY(0)';
+  // 白色→金色渐变（高品质物品）
+  if(it.quality.key==='unique'||it.quality.key==='set'){
+    el.style.color = it.quality.color;
+    el.style.borderColor = it.quality.color;
+    el.style.boxShadow = `0 0 20px ${it.quality.color}`;
+  }
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(()=>{
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(-20px)';
+    setTimeout(()=>{ el.style.display='none'; el.style.boxShadow=''; }, 600);
+  }, 2500);
+}
+// ===========
+
 const mm=document.getElementById('mmCanvas').getContext('2d');
 function drawMinimap(){
   mm.clearRect(0,0,180,180);
@@ -6850,7 +7379,11 @@ setInterval(()=>{
     showWaveResultPanel();
     return;
   }
-  // 阈值：5 + 波次 × 0.5，但不超过 12
+  // 【关键修复】波次进行中时，禁止阈值补刷，必须等玩家点击"继续下一波"
+  // 这解决了"前几波没有结算"的bug：旧逻辑在敌人还剩几只时就提前spawnWave，
+  // 导致 _waveActive 被覆盖、endWaveStats 从未调用、结算面板永远不会弹出
+  if(_waveActive) return;
+  // 阈值：5 + 波次 × 0.5，但不超过 12（仅作为安全网，正常走结算流程）
   const threshold = Math.min(12, 5 + Math.floor(waveLevel*0.5));
   if(aliveNonBoss < threshold) spawnWave();
 }, 8000);
@@ -6927,6 +7460,37 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
     else if(e.code==='ArrowDown' || e.code==='KeyS'){ fuseMoveSel( 1); }
     else if(e.code==='Enter' || e.code==='Space'){ fuseConfirmSel(); }
   });
+  // Tab 键：打开/关闭能力面板（建议3）
+  document.addEventListener('keydown', (e)=>{
+    if(e.code!=='Tab') return;
+    e.preventDefault();
+    const panel = document.getElementById('abilityPanel');
+    if(!panel) return;
+    if(panel.style.display==='block'){
+      panel.style.display='none';
+    } else {
+      renderAbilityPanel();
+      panel.style.display='block';
+    }
+  });
+  // 手机底部"能力"按钮
+  const abilBtn = document.getElementById('abilMobileBtn');
+  if(abilBtn){
+    abilBtn.addEventListener('click', ()=>{
+      const panel = document.getElementById('abilityPanel');
+      if(!panel) return;
+      if(panel.style.display==='block') panel.style.display='none';
+      else { renderAbilityPanel(); panel.style.display='block'; }
+    });
+    abilBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); }, {passive:false});
+  }
+  // 能力面板关闭按钮
+  const abilPClose = document.getElementById('abilPanelClose');
+  if(abilPClose){
+    abilPClose.addEventListener('click', ()=>{
+      document.getElementById('abilityPanel').style.display='none';
+    });
+  }
 }
 syncToggleButtons();
 
@@ -7074,9 +7638,15 @@ function update(dt){
     f.userData.fire.scale.set(0.85*k, 1.4*k, 0.85*k);
     f.userData.pl.intensity=1.6+Math.sin(performance.now()*.013+f.position.z)*.6;
   });
+  // 能力光环更新
+  updateAuras(dt);
+  // 环绕飞球更新
+  updateOrbs(dt);
   // 自动战斗
   player.skills.forEach(s=>{if(s.cdLeft>0)s.cdLeft=Math.max(0,s.cdLeft-dt);});
   const cdrBonus = 1 + ((player._eq && player._eq.cdr) || 0)/100;
+  // 能力buff：CD缩短（正确做法：乘算作用于基础 CD，而非混进 atkSpd）
+  const abilCdMul = 1 - ((player._skillBuffs&&player._skillBuffs.cdRed)||0);
   const atkSpd=(player.equip.weapon?player.equip.weapon.atkSpd:1)*(1+player._dexTotal*.005)*cdrBonus;
   if(controls.isLocked&&player.hp>0&&enemies.length>0){
     // 仅在「技能自动施放」开启时自动放技能；手动模式下由鼠标左键 / 手柄 RT 触发
@@ -7106,7 +7676,8 @@ function update(dt){
       }
       if(need&&!t)continue;
       if(castSkill(s)){
-        s.cdLeft=s.cd/atkSpd;
+        // 能力buff：CD缩短正确乘算
+        s.cdLeft=s.cd*abilCdMul/atkSpd;
         // 触发第一人称武器动作动画
         if(typeof playViewWeaponAnim==='function') playViewWeaponAnim(s.type, s.key);
         break;
@@ -7738,6 +8309,7 @@ function loop(){
       }
       refreshInfo();
       drawMinimap();
+      updateScreenShake(dt);
     } else {
       update(dt);
     }
