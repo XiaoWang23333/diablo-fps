@@ -2,7 +2,7 @@
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
-const GAME_VERSION = 'v0.33.0';
+const GAME_VERSION = 'v0.34.0';
 const GAME_BUILD   = '2026-06-17';
 console.log('%c🎮 Diablo·FPS·Auto '+GAME_VERSION+' ('+GAME_BUILD+')',
   'background:#241c10;color:#e8c45a;padding:4px 10px;border-radius:3px;font-weight:bold');
@@ -3255,6 +3255,130 @@ let _finalBossSpawned = false;
 let _clearCount = 0;
 // 玩家在胜利面板选了"继续游戏" → 解除"通关后停止刷怪"的限制
 let _continueAfterVictory = false;
+
+// ===== 波次结算系统（方案1）=====
+let _waveActive = false;          // 当前波次是否在进行中
+let _waveStats = {                // 本波统计数据
+  killCount: 0,                   // 本波击杀数（相对值，每波重置）
+  killTotalStart: 0,              // 本波开始时的累计击杀数
+  damageTaken: 0,                 // 本波承受总伤害
+  maxHitSrc: null,                // 本波最大单次承伤来源 {type, dmg}
+  maxHitDmg: 0,
+  startTime: 0,                   // 本波开始时间戳
+  waveLevel: 0,                    // 本波波次数
+};
+let _pendingWaveFn = null;         // 待执行的下一波回调（玩家点击继续后调用）
+let _lastWaveResult = null;        // 上一波的结算结果（用于显示）
+
+// 显示波次结算面板
+function showWaveResultPanel(){
+  const st = _lastWaveResult;
+  if(!st) return;
+  const panel = document.getElementById('waveResultPanel');
+  const head  = document.getElementById('wresHead');
+  const body  = document.getElementById('wresBody');
+  const evalEl = document.getElementById('wresEval');
+
+  // 评价等级
+  let evalText = '', evalColor = '';
+  if(st.danger){
+    evalText = '⚠ 危险！'; evalColor = '#ff5050';
+  } else if(st.time < 30){
+    evalText = '⚡ 速通！'; evalColor = '#ffeb3b';
+  } else if(st.damage < player.hpMax * 0.2){
+    evalText = '🛡 无伤通关'; evalColor = '#7bd96a';
+  } else {
+    evalText = '⚔ 顺利通关'; evalColor = '#e8c45a';
+  }
+
+  head.textContent = `第 ${st.wave} 波 · 战绩结算`;
+
+  let html = '';
+  html += `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+    <span>⚔ 击杀</span><b style="color:#fff">${st.kills} 只</b></div>`;
+  html += `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+    <span>💀 承受伤害</span><b style="color:#ff8a8a">${Math.floor(st.damage)}</b></div>`;
+  if(st.maxHitSrc){
+    html += `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <span>🎯 最大威胁</span><b style="color:#ffb0b0">${st.maxHitSrc}（${Math.floor(st.maxHitDmg)} 伤害）</b></div>`;
+  }
+  html += `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+    <span>⏱ 用时</span><b style="color:#5aa6ff">${st.time}s</b></div>`;
+  // 如果本波差点翻车，提示
+  if(st.danger){
+    html += `<div style="margin-top:10px;padding:8px;background:rgba(255,80,80,.12);border:1px solid #ff5050;
+      border-radius:4px;color:#ff8a8a;font-size:12px">⚠ 这波很危险！建议检查装备防御</div>`;
+  }
+  body.innerHTML = html;
+  evalEl.textContent = evalText;
+  evalEl.style.color = evalColor;
+
+  panel.style.display = 'block';
+  gamePaused = true;
+
+  // 绑定继续按钮（先解绑避免重复）
+  const btn = document.getElementById('wresContinueBtn');
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', ()=>{
+    hideWaveResultPanel();
+    spawnWave();
+  });
+  newBtn.addEventListener('touchstart', (e)=>{
+    e.stopPropagation(); e.preventDefault();
+    hideWaveResultPanel();
+    spawnWave();
+  }, {passive:false});
+}
+
+function hideWaveResultPanel(){
+  const panel = document.getElementById('waveResultPanel');
+  if(panel) panel.style.display = 'none';
+  gamePaused = false;
+}
+
+// 记录本波承伤
+function recordWaveDamage(srcType, dmg){
+  if(!_waveActive) return;
+  _waveStats.damageTaken += dmg;
+  if(dmg > _waveStats.maxHitDmg){
+    _waveStats.maxHitDmg = dmg;
+    _waveStats.maxHitSrc  = srcType;
+  }
+}
+
+// 波次开始时调用
+function startWaveStats(wave){
+  _waveActive = true;
+  _waveStats.killTotalStart = player.killCount || 0;
+  _waveStats.damageTaken   = 0;
+  _waveStats.maxHitSrc     = null;
+  _waveStats.maxHitDmg     = 0;
+  _waveStats.startTime     = performance.now();
+  _waveStats.waveLevel     = wave;
+}
+
+// 波次结束时调用（生成结算数据）
+function endWaveStats(){
+  if(!_waveActive) return;
+  _waveActive = false;
+  const now = performance.now();
+  const kills = (player.killCount || 0) - _waveStats.killTotalStart;
+  const damage = _waveStats.damageTaken;
+  const timeSec = Math.floor((now - _waveStats.startTime) / 1000);
+  const hpPct = player.hp / player.hpMax;
+  _lastWaveResult = {
+    wave: _waveStats.waveLevel,
+    kills,
+    damage,
+    maxHitSrc: _waveStats.maxHitSrc,
+    maxHitDmg: _waveStats.maxHitDmg,
+    time: timeSec,
+    danger: hpPct < 0.3 && damage > player.hpMax * 0.5,
+  };
+}
+// ===== 波次结算系统结束 =====
+
 function spawnWave(){
   const p = controls.getObject().position;
   // ===== 第 20 波（最终战）：只刷最终 BOSS，不刷散兵/怪群，给玩家清场感 =====
@@ -3363,6 +3487,8 @@ function spawnWave(){
   if(!isFinalWave) waveLevel++;
   // 自动存档：每波开始作为存档点（首帧 init 时 _autosaveEnabled=false，不覆盖旧档）
   if(_autosaveEnabled) saveGame(true);
+  // 开始统计本波数据（用当前的 waveLevel-1，即刚刷的这波）
+  startWaveStats(isFinalWave ? FINAL_BOSS_WAVE : waveLevel-1);
 }
 
 // ===== 关卡进度面板渲染 =====
@@ -4082,6 +4208,10 @@ function damagePlayer(v, source){
     if(player.shield<=0){ player.shield=0; player.shieldT=0; toast('🛡 护盾破碎'); }
   }
   player.hp-=v;player.invuln=.25;
+  // 记录本波承伤（用于结算面板）
+  if(_waveActive && source && source.type){
+    recordWaveDamage(ENEMY_TYPES[source.type] ? ENEMY_TYPES[source.type].name : source.type, v);
+  }
   Audio.playerHit();
   // 反伤：装备 thorns 词条 → 给攻击者造成固定反伤
   const thorns = (player._eq && player._eq.thorns) || 0;
@@ -4092,6 +4222,9 @@ function damagePlayer(v, source){
 }
 function gameOver(){
   if(player._dead) return;        // 防重复触发
+  // 关闭波次结算面板（如果正在显示）
+  const wpanel = document.getElementById('waveResultPanel');
+  if(wpanel) wpanel.style.display = 'none';
   player._dead = true;
   player.deathCount = (player.deathCount||0) + 1;
   Audio.death();
@@ -5454,6 +5587,42 @@ function executeFuseWithAnim(grp){
       const randSlot = slots[Math.floor(Math.random()*slots.length)];
       newIt = makeItemAtQuality(randSlot, maxLvl, targetQ);
       newIt.isNew = true;
+
+      // === 方案4：随机保留源装备的极品词缀 ===
+      // 收集所有源装备的词缀，按数值排序，随机保留1条（5%概率保留2条）
+      {
+        const allAffixes = [];
+        sources.forEach(src=>{
+          if(src && src.affixes){
+            src.affixes.forEach(af=>{
+              if(af && af.k && af.value!=null) allAffixes.push({...af});
+            });
+          }
+        });
+        if(allAffixes.length > 0){
+          // 按数值排序（降序）
+          allAffixes.sort((a,b)=>(b.value||0)-(a.value||0));
+          // 决定保留几条：5%概率保留2条，否则1条
+          const keepCount = (Math.random() < 0.05 && allAffixes.length >= 2) ? 2 : 1;
+          const kept = allAffixes.slice(0, keepCount);
+          // 把保留的词缀加到新装备上（避免key重复：如果新装备已有同key词缀，替换它）
+          if(!newIt._keptAffixes) newIt._keptAffixes = [];
+          kept.forEach(kaf=>{
+            // 检查新装备是否已有同key词缀
+            const existIdx = newIt.affixes.findIndex(af=>af.k === kaf.k);
+            if(existIdx >= 0){
+              // 替换现有词缀
+              newIt.affixes[existIdx] = {...kaf};
+            } else {
+              // 追加新词缀（如果affixes数组还没满）
+              newIt.affixes.push({...kaf});
+            }
+            newIt._keptAffixes.push({...kaf});
+          });
+        }
+      }
+      // === 词缀保留结束 ===
+
       // ✨ 自动拆宝石：把源装备上镶嵌的宝石抽出，先存到 newIt._recoverGems 待会塞背包
       const recovered = [];
       sources.forEach(src=>{
@@ -5547,7 +5716,23 @@ function executeFuseWithAnim(grp){
         requestAnimationFrame(()=>requestAnimationFrame(()=>bonusEl.classList.add('show')));
       }, 200);
     }
-    toast(`⚗ 合成成功：${newIt.name}`);
+    // 显示保留的词缀信息
+    let fuseMsg = `⚗ 合成成功：${newIt.name}`;
+    if(newIt._keptAffixes && newIt._keptAffixes.length > 0){
+      const keptNames = newIt._keptAffixes.map(af=>{
+        // 尝试从 AFFIX_DEFS 获取显示名称，否则直接用 key
+        let label = af.k || '?';
+        try{
+          if(typeof AFFIX_DEFS!=='undefined' && AFFIX_DEFS[af.k] && AFFIX_DEFS[af.k].label){
+            label = AFFIX_DEFS[af.k].label;
+          }
+        }catch(e){}
+        return `+${af.value} ${label}`;
+      }).join('，');
+      fuseMsg += `　（保留：${keptNames}）`;
+    }
+    toast(fuseMsg);
+
 
     // 1.0s 后清场
     setTimeout(()=>{
@@ -6658,6 +6843,13 @@ setInterval(()=>{
     return;
   }
   const aliveNonBoss = enemies.filter(e=>!e.isBoss).length;
+  const hasBoss = enemies.some(e=>e.isBoss);
+  // 波次结算：场上非 BOSS 敌人全清，且本波在进行中 → 结束上一波，显示结算面板
+  if(_waveActive && aliveNonBoss === 0 && !hasBoss){
+    endWaveStats();
+    showWaveResultPanel();
+    return;
+  }
   // 阈值：5 + 波次 × 0.5，但不超过 12
   const threshold = Math.min(12, 5 + Math.floor(waveLevel*0.5));
   if(aliveNonBoss < threshold) spawnWave();

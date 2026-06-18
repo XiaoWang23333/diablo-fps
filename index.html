@@ -496,6 +496,27 @@
 </div>
 <div id="questToast"></div>
 
+<!-- 波次结算面板（每波结束后弹出，点击继续才开始下一波） -->
+<div id="waveResultPanel" style="
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:480px;max-width:92vw;max-height:85vh;overflow-y:auto;
+  background:linear-gradient(180deg,#1a1408,#0f0c08);
+  border:2px solid var(--gold);border-radius:8px;color:#ddd;z-index:58;display:none;
+  box-shadow:0 0 40px rgba(232,196,90,.4);text-align:center;padding:0">
+  <div id="wresHead" style="padding:14px 18px;background:#241c10;border-bottom:1px solid #6b5a2b;
+    font-size:18px;letter-spacing:3px;color:var(--gold);font-weight:bold"></div>
+  <div id="wresBody" style="padding:16px 18px;font-size:13px;line-height:1.8;text-align:left"></div>
+  <div id="wresEval" style="padding:6px 18px 10px;font-size:15px;font-weight:bold;letter-spacing:2px"></div>
+  <button id="wresContinueBtn" style="
+    display:block;margin:10px auto 18px;padding:12px 36px;
+    background:linear-gradient(180deg,#5a3a14,#241408);
+    border:2px solid var(--gold);border-radius:6px;color:var(--gold);
+    font-size:16px;font-weight:bold;letter-spacing:4px;cursor:pointer;
+    box-shadow:0 0 14px rgba(232,196,90,.45);transition:all .15s ease">
+    ▶ 继续下一波
+  </button>
+</div>
+
 <!-- 胜利面板（击败最终 BOSS 后弹出） -->
 <div id="victoryPanel" style="
   position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
