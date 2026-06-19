@@ -26,8 +26,9 @@
   .orb.mp .fill{background:radial-gradient(circle at 50% 30%,#6ab2ff,#1a4a9e 70%,#0a1f4a)}
   .orb .lbl{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:bold;text-shadow:0 0 4px #000;font-size:14px;letter-spacing:1px}
   #skillbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
-  #expbar{width:100%;max-width:680px;height:10px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden;transition:box-shadow .2s}
+  #expbar{width:100%;max-width:680px;height:10px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden;transition:box-shadow .2s;position:relative}
   #expbar>div{height:100%;width:0;background:linear-gradient(90deg,#e8c45a,#fff5b8);box-shadow:0 0 6px #e8c45a inset;transition:width .6s cubic-bezier(.3,1.5,.6,1)}
+  #expLvl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9px;color:#fff;text-shadow:0 0 3px #000;font-weight:bold;pointer-events:none;white-space:nowrap}
   #expbar.expFlash{box-shadow:0 0 14px var(--gold),0 0 28px rgba(232,196,90,.6);border-color:var(--gold)}
   #expbar.expFlash>div{filter:brightness(1.6)}
   #skills{display:flex;gap:6px;flex-wrap:wrap;max-width:90vw;max-height:140px;overflow-y:auto;justify-content:center}
@@ -36,6 +37,7 @@
   .slot .cd{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);text-align:center;font-size:10px;color:#fff}
   .slot .ico{font-size:22px}
   #info{position:fixed;left:14px;top:14px;z-index:6;pointer-events:none;font-size:13px;line-height:1.5;background:rgba(0,0,0,.4);padding:8px 12px;border:1px solid #333;border-radius:4px;min-width:180px;transition:opacity .2s}
+  #chaseMode{position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:8;pointer-events:none;font-size:18px;font-weight:bold;color:#ff4444;text-shadow:0 0 10px #ff0000,0 0 4px #000;letter-spacing:2px;opacity:0;transition:opacity .3s;display:none}
   /* 战斗界面默认隐藏属性面板；暂停 / 背包打开时显示 */
   body:not(.uiShow) #info{opacity:0;pointer-events:none}
   body.uiShow #info{opacity:1}
@@ -498,6 +500,7 @@
   <button id="btnMute"   class="tgl">🔊 音效：开</button>
 </div>
 <div id="toast"></div>
+<div id="chaseMode">⚡ 追击模式</div>
 <div id="loot"></div>
 <div id="dmgLayer"></div>
 <div id="questPanel">
@@ -604,7 +607,7 @@
 <div id="hud">
   <div class="orb hp"><div class="fill" id="hpFill" style="height:100%"></div><div class="lbl" id="hpLbl">100/100</div></div>
   <div id="skillbar">
-    <div id="expbar"><div id="expFill"></div></div>
+    <div id="expbar"><div id="expFill"></div><span id="expLvl"></span></div>
     <div id="skills"></div>
   </div>
   <div class="orb mp"><div class="fill" id="mpFill" style="height:100%"></div><div class="lbl" id="mpLbl">50/50</div></div>

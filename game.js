@@ -1746,6 +1746,7 @@ function getAvailableAbilities(){
     const curLv = _playerAbilities[prefix] || 0;
     return curLv < 3;
   });
+  if(pool.length === 0) return [];
   // 按稀有度加权随机
   const weighted = [];
   pool.forEach(a=>{
@@ -1755,10 +1756,20 @@ function getAvailableAbilities(){
     else w = 8;
     for(let i=0;i<w;i++) weighted.push(a);
   });
-  // 随机抽3个
+  // 随机抽3个（确保总是返回3个，允许重复如果必要）
   const picks = [];
   const used = new Set();
-  for(let i=0;i<3 && weighted.length>0;i++){
+  for(let i=0;i<3;i++){
+    if(weighted.length === 0){
+      // 所有能力都已使用，重新填充池（允许重复）
+      pool.forEach(a=>{
+        let w = 1;
+        if(a.rarity===1) w = 50;
+        else if(a.rarity===2) w = 25;
+        else w = 8;
+        for(let j=0;j<w;j++) weighted.push(a);
+      });
+    }
     const idx = Math.floor(Math.random()*weighted.length);
     const a = weighted[idx];
     if(used.has(a.id)){ weighted.splice(idx,1); continue; }
@@ -2774,15 +2785,6 @@ function applyEquipStats(){
   refreshSkillBar();refreshInfo();refreshEquip();
   // 重建第一人称手持武器（每次装备/换武器都会调用）
   if(typeof rebuildViewWeapon === 'function') rebuildViewWeapon();
-  // 属性变化飘字（仅当不是初始化时）
-  if(_prev && typeof spawnStatChangeFloats==='function'){
-    spawnStatChangeFloats(_prev, {
-      str: player._strTotal||0, dex: player._dexTotal||0, int: player._intTotal||0,
-      hpMax: player.hpMax||0, mpMax: player.mpMax||0, armor: player.armor||0,
-      dmgPct:(player._eq.dmgPct||0), critChance:(player._eq.critChance||0),
-      critDmg:(player._eq.critDmg||0), lifeOnHit:(player._eq.lifeOnHit||0)
-    });
-  }
 }
 
 // ---------- 任务系统 ----------
@@ -4999,6 +5001,9 @@ function refreshInfo(){
   document.getElementById('hpLbl').textContent=Math.ceil(player.hp)+'/'+Math.ceil(player.hpMax)+_suffix;
   document.getElementById('mpLbl').textContent=Math.ceil(player.mp)+'/'+Math.ceil(player.mpMax);
   document.getElementById('expFill').style.width=(player.exp/player.expNeed*100)+'%';
+  // 经验条上显示当前等级
+  const expLvlEl = document.getElementById('expLvl');
+  if(expLvlEl) expLvlEl.textContent = 'Lv.' + player.level;
   // 流派分布显示（属性面板内）
   const classEl = document.getElementById('sClass');
   if(classEl && typeof getClassMastery==='function'){
@@ -5456,17 +5461,10 @@ function showTip(it,x,y){
     const innerHtml = summary + itemTipHtml(it);
     tipEl.innerHTML = `<div class="tipScroll" style="height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px">${innerHtml}</div>`;
     const scrollBox = tipEl.querySelector('.tipScroll');
-    // 对比当前同槽装备：拼到 tipScroll 末尾（不显示冗余的"当前已装备"标题行，顶部摘要已有评分对比）
+    // 对比当前同槽装备：拼到 tipScroll 末尾（格式与上方新装备完全一致）
     const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
-      const html =
-        `<div style="margin:10px -10px 8px;padding:6px 10px;`+
-        `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
-        `border-top:2px solid var(--gold);`+
-        `border-bottom:2px solid var(--gold);`+
-        `</div>`+
-        itemTipHtml(cur);
-      if(scrollBox) scrollBox.innerHTML += html;
+      if(scrollBox) scrollBox.innerHTML += itemTipHtml(cur);
     }
     // 触屏模式也需要绑定流派标签点击事件（innerHTML 在此路径才最终确定）
     (function bindClassTagTipTouch(){
@@ -7266,13 +7264,13 @@ function spawnDmgText(worldPos,val,crit){
   const fontSize = crit ? Math.min(38, 22+Math.floor(absVal/50)) : Math.min(26, 14+Math.floor(absVal/80));
   d.style.cssText=`position:fixed;left:${x}px;top:${y}px;z-index:19;pointer-events:none;
     font-size:${fontSize}px;font-weight:bold;letter-spacing:1px;
-    color:${crit?'#ffe135':'#ffffff'};
-    text-shadow:${crit?'0 0 8px #ff9600,0 0 20px #ff6a00,0 0 4px #000':'0 0 4px rgba(0,0,0,.8)'};
+    color:${crit?'#ff4444':'#ffffff'};
+    text-shadow:${crit?'0 0 6px #ff0000,0 0 4px #000':'0 0 4px rgba(0,0,0,.8)'};
     font-family:Arial Black,sans-serif;
     transition:all .9s cubic-bezier(.2,.8,.3,1);
     opacity:1;transform:translateY(0) scale(1);
-    text-stroke:${crit?'1.5px #a00':'0'};
-    -webkit-text-stroke:${crit?'1.5px #a00':'0'};
+    text-stroke:0;
+    -webkit-text-stroke:0;
   `;
   d.textContent=(crit?'暴击! ':'')+Math.round(val);
   dmgLayer.appendChild(d);
@@ -7641,11 +7639,12 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
       }
     }, {passive:false});
   }
-  // 能力面板关闭按钮
+  // 能力面板关闭按钮（关闭时取消暂停）
   const abilPClose = document.getElementById('abilPanelClose');
   if(abilPClose){
     abilPClose.addEventListener('click', ()=>{
       document.getElementById('abilityPanel').style.display='none';
+      gamePaused = false;  // 关闭时恢复游戏
     });
   }
 }
@@ -7657,6 +7656,24 @@ const dirVec=new THREE.Vector3(),rightVec=new THREE.Vector3(),clock=new THREE.Cl
 function update(dt){
   // 手柄轮询
   const padIn = pollGamepad(dt);
+
+  // 追击模式：剩余敌人≤5个时触发
+  const chaseEl = document.getElementById('chaseMode');
+  if(chaseEl){
+    if(enemies.length > 0 && enemies.length <= 5){
+      if(chaseEl.style.display === 'none'){
+        chaseEl.style.display = 'block';
+        requestAnimationFrame(()=>{ chaseEl.style.opacity = '1'; });
+      }
+    } else {
+      if(chaseEl.style.display === 'block'){
+        chaseEl.style.opacity = '0';
+        setTimeout(()=>{
+          if(chaseEl.style.opacity === '0') chaseEl.style.display = 'none';
+        }, 300);
+      }
+    }
+  }
 
   // 兜底：战斗状态（未暂停且背包未打开）下绝不显示物品 tip / 对比框，
   // 防止任何残留的道具提示框出现在左上角遮挡任务面板。
