@@ -1779,8 +1779,8 @@ function applyAbility(ability){
       if(ability.skill && SKILL_DB[ability.skill]){
         const have = player.skills.some(s=>s.key===ability.skill);
         if(!have){
-          // 技能栏无限 → 直接添加新技能
-          player.skills.push({key:ability.skill, ...SKILL_DB[ability.skill], cdLeft:0});
+          // 技能栏无限 → 直接添加新技能（标记为 earned）
+          player.skills.push({key:ability.skill, ...SKILL_DB[ability.skill], cdLeft:0, earned:true});
           refreshSkillBar();
           toast(`获得技能：${ability.name}`);
         } else {
@@ -1828,6 +1828,7 @@ function showAbilitySelectPanel(){
   const picks = getAvailableAbilities();
   if(picks.length===0){
     // 没有可选能力了，直接继续
+    toast('所有能力已达满级！');
     hideAbilitySelectPanel();
     return;
   }
@@ -1840,6 +1841,11 @@ function showAbilitySelectPanel(){
   </div>`;
   picks.forEach((a,i)=>{
     const rarityColor = a.rarity===3?'#e8c45a':a.rarity===2?'#f4e26b':'#5aa6ff';
+    // 显示当前能力等级
+    const prefix = a.id.split('_')[0]+'_'+a.id.split('_')[1];
+    const curLv = _playerAbilities[prefix] || 0;
+    const maxLv = 3;
+    const lvText = curLv > 0 ? ` <span style="font-size:11px;color:${rarityColor}">Lv.${curLv}/${maxLv}</span>` : '';
     html += `<div class="abilCard" data-idx="${i}" style="
       margin:0 18px 10px;padding:14px 16px;
       background:linear-gradient(135deg,#1a1408,#0f0c08);
@@ -1847,7 +1853,7 @@ function showAbilitySelectPanel(){
       cursor:pointer;text-align:left;
       transition:all .12s ease;
       ">
-      <div style="font-size:16px;color:${rarityColor};margin-bottom:4px">${a.ico} ${a.name}</div>
+      <div style="font-size:16px;color:${rarityColor};margin-bottom:4px">${a.ico} ${a.name}${lvText}</div>
       <div style="font-size:12px;color:#bbb;line-height:1.5">${a.desc}</div>
     </div>`;
   });
@@ -2496,7 +2502,8 @@ const HELM_NAMES=['布帽','皮盔','铁盔','头骨面具','王冠'];
 const RING_NAMES=['铜戒','银戒','金戒','宝石戒','秘银指环'];
 
 function pickQuality(level){
-  const w=QUALITY.map(q=>q.weight+(q.key!=='common'?level*.4:-level*.5));
+  // 提高高级品质权重，让后期更容易掉高级装备
+  const w=QUALITY.map(q=>q.weight+(q.key!=='common'?(level*.6):-(level*.3)));
   const total=w.reduce((a,b)=>a+Math.max(0,b),0);
   let r=Math.random()*total;
   for(let i=0;i<QUALITY.length;i++){r-=Math.max(0,w[i]);if(r<=0)return QUALITY[i];}
@@ -2740,10 +2747,19 @@ function applyEquipStats(){
   player.hpMax=newHpMax;player.mpMax=newMpMax;
   player.hpRegen=1+stats.hpRegen+player._strTotal*.05;
   player.mpRegen=2.5+stats.mpRegen+player._intTotal*.08;
+  // 保存玩家通过"三选一"获得的技能（标记为 earned）
+  const earnedSkills = player.skills.filter(s=>s.earned);
   const w=player.equip.weapon;
   player.skills=w?w.skills.map(k=>({key:k,...SKILL_DB[k],cdLeft:0})):[{key:'swing',...SKILL_DB.swing,cdLeft:0}];
-  // 装备词条 extraSkill：把额外技能并入 player.skills（去重）
+  // 把 earned 技能加回去（去重）
   const haveSkillKeys = new Set(player.skills.map(s=>s.key));
+  earnedSkills.forEach(sk=>{
+    if(!haveSkillKeys.has(sk.key)){
+      player.skills.push({...sk});
+      haveSkillKeys.add(sk.key);
+    }
+  });
+  // 装备词条 extraSkill：把额外技能并入 player.skills（去重）
   ['weapon','helm','armor','ring'].forEach(s=>{
     const it = player.equip[s]; if(!it) return;
     it.affixes.forEach(a=>{
@@ -3601,8 +3617,8 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   // 数值成长曲线：前5波线性慢增长，5波后指数加快，避免前期压力过大
   const hpScale  = 1 + level*0.20 + Math.max(0,level-5)*level*0.018;
   const dmgScale = 1 + level*0.10 + Math.max(0,level-5)*level*0.006;
-  // 难度加成：每提升 1 难度，HP/伤害额外 ×1.5
-  const diffMul = 1 + (difficulty-1)*0.35;
+  // 难度加成：每提升 1 难度，HP/伤害额外 ×(1 + (difficulty-1)*0.6)
+  const diffMul = 1 + (difficulty-1)*0.6;
   const hpMax=Math.floor(def.hp * hpScale * diffMul * (isElite?2.5:1) * (isBoss?12:1));
   const e={
     type,def,mesh,hpMax,hp:hpMax,level,isElite,isBoss,
@@ -4011,6 +4027,8 @@ function saveGame(silent){
   // 死亡画面下手动点保存（silent=false）则尊重用户选择
   if(silent && player && player._dead) return false;
   try{
+    // 保存技能信息（只保存key和earned标记）
+    const skillsData = player.skills.map(s=>({key:s.key, earned:s.earned||false}));
     const data = {
       v: (typeof GAME_VERSION!=='undefined'?GAME_VERSION:'?'), ts: Date.now(),
       player: {
@@ -4018,7 +4036,8 @@ function saveGame(silent){
         level:player.level, exp:player.exp, expNeed:player.expNeed,
         str:player.str, dex:player.dex, int:player.int,
         killCount:player.killCount, deathCount:player.deathCount||0, activeSkill:player.activeSkill,
-        equip:player.equip, inv:player.inv
+        equip:player.equip, inv:player.inv,
+        skills:skillsData  // 保存技能信息
       },
       waveLevel, difficulty,
       victoryDone:_victoryDone, clearCount:_clearCount, continueAfterVictory:_continueAfterVictory,
@@ -4091,6 +4110,19 @@ function loadGame(){
   }
   // 重算装备属性（会重建 skills / hpMax / mpMax 等）
   applyEquipStats();
+  // 恢复通过"三选一"获得的技能（从存档中）
+  if(P.skills && Array.isArray(P.skills)){
+    const haveSkillKeys = new Set(player.skills.map(s=>s.key));
+    P.skills.forEach(sk=>{
+      if(sk.earned && !haveSkillKeys.has(sk.key)){
+        if(SKILL_DB[sk.key]){
+          player.skills.push({key:sk.key, ...SKILL_DB[sk.key], cdLeft:0, earned:true});
+          haveSkillKeys.add(sk.key);
+        }
+      }
+    });
+    refreshSkillBar();
+  }
   // hp/mp 用存档值，clamp 到新上限
   player.hp = Math.min(P.hp!=null?P.hp:player.hpMax, player.hpMax);
   player.mp = Math.min(P.mp!=null?P.mp:player.mpMax, player.mpMax);
@@ -4437,16 +4469,16 @@ function updateChests(dt){
 }
 
 function dropLoot(pos,level,isElite,isBoss){
-  // 整体掉落进一步降频（v0.19）
-  // 普通怪 10% 掉 1 件；精英 50% 掉 1 件 + 15% 第 2 件；BOSS 固定 3 件
+  // 提高掉落率（v0.24）- 让后期也能拿到更好的装备
+  // 普通怪 25% 掉 1 件；精英 70% 掉 1 件 + 30% 第 2 件；BOSS 固定 4 件
   let count = 0;
   if(isBoss){
-    count = 3;
+    count = 4;  // 提高BOSS掉落数量
   } else if(isElite){
-    if(Math.random() < 0.50) count = 1;
-    if(count===1 && Math.random() < 0.15) count = 2;
+    if(Math.random() < 0.70) count = 1;
+    if(count===1 && Math.random() < 0.30) count = 2;
   } else {
-    if(Math.random() < 0.10) count = 1;   // 90% 不掉任何东西
+    if(Math.random() < 0.25) count = 1;   // 提高普通怪掉落率
   }
   for(let i=0;i<count;i++){
     const it=genItem(level);
@@ -4524,7 +4556,8 @@ function tryPickup(){
 function itemScore(it){
   let s=(it.dmgMin||0)+(it.dmgMax||0)+(it.armor||0)*2;
   it.affixes.forEach(a=>s+=a.v*(a.k==='dmgPct'?2:1));
-  s+={common:0,magic:5,rare:15,set:25,unique:40}[it.quality.key];
+  // 去掉套装固定加成，只计算实际属性（套装效果已在affixes中）
+  s+={common:0,magic:5,rare:15,set:0,unique:40}[it.quality.key];
   return s;
 }
 function autoEquipBetter(it){
@@ -4553,11 +4586,16 @@ function calcPlayerDamage(skill){
   let dmg=rand(lo,hi) * dmgScale;
   const eq=player._eq||{};
   dmg*=1+(eq.dmgPct||0)/100;
-  // 元素伤害加成（按技能 key 粗略匹配）
+  // 元素伤害加成（按技能 key 和类型匹配）
   const sk = skill.key || '';
-  if((sk==='fireball'||sk==='meteor')   && eq.fireDmg)  dmg *= 1+eq.fireDmg/100;
-  if((sk==='iceshard' ||sk==='nova')     && eq.iceDmg)   dmg *= 1+eq.iceDmg/100;
-  if((sk==='chain'    ||sk==='lightning')&& eq.lightDmg) dmg *= 1+eq.lightDmg/100;
+  const skType = skill.type || '';
+  if((sk==='fireball'||sk==='meteor' || skType==='fire')   && eq.fireDmg)  dmg *= 1+eq.fireDmg/100;
+  if((sk==='iceshard' ||sk==='nova' || skType==='ice')      && eq.iceDmg)   dmg *= 1+eq.iceDmg/100;
+  if((sk==='chain'    ||sk==='lightning' || skType==='lightning') && eq.lightDmg) dmg *= 1+eq.lightDmg/100;
+  // 通用元素伤害（如果技能本身带有元素标签）
+  if(skill.element === 'fire'  && eq.fireDmg)  dmg *= 1+eq.fireDmg/100;
+  if(skill.element === 'ice'   && eq.iceDmg)   dmg *= 1+eq.iceDmg/100;
+  if(skill.element === 'lightning' && eq.lightDmg) dmg *= 1+eq.lightDmg/100;
   // 能力buff：额外暴击率
   const bonusCrit = (player._skillBuffs&&player._skillBuffs.critChance)||0;
   const isCrit=Math.random()*100<((eq.critChance||0)+5+bonusCrit);
@@ -5162,6 +5200,21 @@ document.addEventListener('mousemove',e=>{
   }
 });
 
+
+// 全局函数：显示流派精通信息（供 onclick 内联属性调用，绕过 pointer-events 限制）
+window.showClassMastery = function(tagEl){
+  const ckey = tagEl.getAttribute('data-ctag');
+  if(!ckey || !CLASS_DB[ckey]) return;
+  const cls = CLASS_DB[ckey];
+  let count = 0;
+  ['weapon','helm','armor','ring'].forEach(s=>{
+    const eq = player.equip[s];
+    if(eq && eq.classTag === ckey) count++;
+  });
+  const activeMark = count >= 4 ? ' ✅ 已激活' : ` (${count}/4)`;
+  toast(`${cls.icon} ${cls.name}流派${activeMark}\n${cls.mastery}`, 2500);
+};
+
 // 渲染单件物品的 tip HTML
 // 部位中文名
 const SLOT_CN = {weapon:'武器',helm:'头盔',armor:'护甲',ring:'戒指'};
@@ -5210,7 +5263,7 @@ function itemTipHtml(it, title){
   // 流派标签：醒目色彩条，点击查看精通效果
   if(it.classTag && CLASS_DB[it.classTag]){
     const cls = CLASS_DB[it.classTag];
-    html+=`<div class="classTagTip" data-ctag="${it.classTag}" style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px;cursor:pointer">${cls.icon} ${cls.name}流派</div>`;
+    html+=`<div class="classTagTip" data-ctag="${it.classTag}" onclick="window.showClassMastery(this)" style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px;cursor:pointer;pointer-events:auto">${cls.icon} ${cls.name}流派</div>`;
   }
   if(it.dmgMin)html+=`<div>伤害 ${it.dmgMin}-${it.dmgMax}</div>`;
   if(it.armor)html+=`<div>护甲 +${it.armor}</div>`;
@@ -7555,24 +7608,37 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
       panel.style.display='block';
     }
   });
-  // 手机底部"能力"按钮（提升z-index避免被触屏层遮挡）
+  // 手机底部"能力"按钮（调整位置避免与右摇杆重叠）
   const abilBtn = document.getElementById('abilMobileBtn');
   if(abilBtn){
     abilBtn.style.zIndex = '30';
+    abilBtn.style.bottom = '100px';  // 提高按钮位置，避免与右摇杆重叠
     abilBtn.addEventListener('click', (e)=>{
       e.stopPropagation();
       const panel = document.getElementById('abilityPanel');
       if(!panel) return;
-      if(panel.style.display==='block') panel.style.display='none';
-      else { renderAbilityPanel(); panel.style.display='block'; }
+      if(panel.style.display==='block') {
+        panel.style.display='none';
+        gamePaused = false;  // 关闭时恢复游戏
+      } else { 
+        renderAbilityPanel(); 
+        panel.style.display='block'; 
+        gamePaused = true;   // 打开时暂停游戏
+      }
     });
     abilBtn.addEventListener('touchend', (e)=>{ 
       e.preventDefault();
       e.stopPropagation();
       const panel = document.getElementById('abilityPanel');
       if(!panel) return;
-      if(panel.style.display==='block') panel.style.display='none';
-      else { renderAbilityPanel(); panel.style.display='block'; }
+      if(panel.style.display==='block') {
+        panel.style.display='none';
+        gamePaused = false;
+      } else { 
+        renderAbilityPanel(); 
+        panel.style.display='block'; 
+        gamePaused = true;
+      }
     }, {passive:false});
   }
   // 能力面板关闭按钮
