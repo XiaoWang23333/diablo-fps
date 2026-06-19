@@ -378,6 +378,13 @@
                         display:block;width:auto}
   /* 同时让大背包按钮的图标上移一点，给 lbl 让位 */
   #tFnRow .tInvBig{padding-bottom:10px;line-height:1}
+  /* 背包按钮拾取动画 */
+  @keyframes invButtonPulse{
+    0%{transform:scale(1)}
+    50%{transform:scale(1.3)}
+    100%{transform:scale(1)}
+  }
+  #tInv.invPulse{animation:invButtonPulse .4s ease-in-out}
   #tAuto.on, #tJump.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
@@ -518,9 +525,9 @@
   box-shadow:0 0 60px rgba(232,196,90,.5);text-align:center;padding:0">
 </div>
 
-<!-- 能力面板（Tab键打开，显示已选能力，手机底部常驻按钮） -->
+<!-- 能力面板（Tab键打开，显示已选能力，默认右下角） -->
 <div id="abilityPanel" style="
-  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  position:fixed;right:20px;bottom:80px;
   width:460px;max-width:92vw;max-height:80vh;overflow-y:auto;
   background:linear-gradient(180deg,#12100a,#0a0906);
   border:2px solid #5aa6ff;border-radius:8px;color:#ddd;z-index:57;display:none;

@@ -1747,6 +1747,7 @@ function getAvailableAbilities(){
     return curLv < 3;
   });
   if(pool.length === 0) return [];
+
   // 按稀有度加权随机
   const weighted = [];
   pool.forEach(a=>{
@@ -1756,26 +1757,36 @@ function getAvailableAbilities(){
     else w = 8;
     for(let i=0;i<w;i++) weighted.push(a);
   });
-  // 随机抽3个（确保总是返回3个，允许重复如果必要）
+
+  // 随机抽3个（确保总是返回3个不重复的选项）
   const picks = [];
   const used = new Set();
-  for(let i=0;i<3;i++){
-    if(weighted.length === 0){
-      // 所有能力都已使用，重新填充池（允许重复）
-      pool.forEach(a=>{
-        let w = 1;
-        if(a.rarity===1) w = 50;
-        else if(a.rarity===2) w = 25;
-        else w = 8;
-        for(let j=0;j<w;j++) weighted.push(a);
-      });
-    }
+
+  // 第一轮：尝试选择3个不重复的
+  let attempts = 0;
+  while(picks.length < 3 && attempts < 100){
+    attempts++;
+    if(weighted.length === 0) break;
+
     const idx = Math.floor(Math.random()*weighted.length);
     const a = weighted[idx];
-    if(used.has(a.id)){ weighted.splice(idx,1); continue; }
+
+    if(used.has(a.id)){
+      weighted.splice(idx, 1);
+      continue;
+    }
+
     used.add(a.id);
     picks.push({...a});
+    weighted.splice(idx, 1);
   }
+
+  // 如果picks不足3个（pool太小），从pool中随机补充（允许重复）
+  while(picks.length < 3 && pool.length > 0){
+    const a = pool[Math.floor(Math.random()*pool.length)];
+    picks.push({...a});
+  }
+
   return picks;
 }
 
@@ -2188,18 +2199,6 @@ const AFFIX_POOL=[
   {k:'thorns',name:'反伤{v}伤害',roll:[5,20]},
   {k:'goldFind',name:'+{v}%物品获取',roll:[10,40]},
   {k:'expBonus',name:'+{v}%经验加成',roll:[5,20]},
-  // 技能词条（附加额外技能，rare+ 才能出现；roll 用作"等级提示"显示但实际不影响）
-  {k:'extraSkill', skill:'fireball', name:'额外技能：🔥 火球',          roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'iceshard', name:'额外技能：❄ 冰晶',           roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'arrow',    name:'额外技能：🏹 多重射击',       roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'bolt',     name:'额外技能：➹ 穿刺箭',         roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'chain',    name:'额外技能：⚡ 闪电链',         roll:[1,1], minQuality:'set'},
-  {k:'extraSkill', skill:'meteor',   name:'额外技能：☄ 陨石',           roll:[1,1], minQuality:'set'},
-  {k:'extraSkill', skill:'nova',     name:'额外技能：✦ 新星',           roll:[1,1], minQuality:'unique'},
-  // 防御性技能词条
-  {k:'extraSkill', skill:'heal',     name:'额外技能：✚ 治疗术',         roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'barrier',  name:'额外技能：🛡 守护护盾',       roll:[1,1], minQuality:'rare'},
-  {k:'extraSkill', skill:'warcry',   name:'额外技能：🪖 铁壁姿态',       roll:[1,1], minQuality:'set'},
 ];
 
 // ---------- 宝石 ----------
@@ -2530,21 +2529,15 @@ function rollAffix(level, usedKeys, qualityKey){
     if(!a.minQuality) return true;
     return myRank >= (_QualityRankMap[a.minQuality] || 0);
   });
-  // 2) 排除已用过的词条；技能词条还要避免"加同一个技能两次"
+  // 2) 排除已用过的词条
   if(usedKeys && usedKeys.size>0){
-    const filtered = pool.filter(a=>{
-      // 普通词条：用 k 去重
-      if(a.k!=='extraSkill') return !usedKeys.has(a.k);
-      // 技能词条：用 'extraSkill:技能名' 去重，允许多个不同技能
-      return !usedKeys.has('extraSkill:'+a.skill);
-    });
+    const filtered = pool.filter(a=> !usedKeys.has(a.k) );
     if(filtered.length>0) pool = filtered;
   }
   if(pool.length===0) pool = AFFIX_POOL;   // 保险
   const a = pool[Math.floor(Math.random()*pool.length)];
   const v = randi(a.roll[0], a.roll[1]) + Math.floor(level*.3);
   const out = {k:a.k, v, label:a.name.replace('{v}',v)};
-  if(a.k==='extraSkill') out.skill = a.skill;
   return out;
 }
 function pickPrefix(){return pick(['锐利的','坚固的','古老的','燃烧的','凛冽的','咆哮的','秘法的','黯影的','炽天的','贪婪的']);}
@@ -2558,8 +2551,7 @@ function genItem(level,slotForce){
   const usedKeys = new Set();
   for(let i=0;i<cnt;i++){
     const af = rollAffix(level, usedKeys, q.key);
-    // 技能词条：用 'extraSkill:技能名' 作为去重键，允许同一件出多个不同技能
-    usedKeys.add(af.k==='extraSkill' ? ('extraSkill:'+af.skill) : af.k);
+    usedKeys.add(af.k);
     item.affixes.push(af);
   }
   // 套装归属：仅 set 品质有
@@ -2574,8 +2566,6 @@ function genItem(level,slotForce){
     item.dmgMax=base[1]+Math.floor(level*1.6);
     item.atkSpd=WEAPON_TYPES[wt].atkSpd;
     item.skills=[...WEAPON_TYPES[wt].skills];
-    if(q.key==='rare'||q.key==='set')item.skills.push(pick(['nova','meteor','chain']));
-    if(q.key==='unique'){item.skills.push('meteor');item.skills.push('chain');}
     item.name=pick(WEAPON_NAMES[wt]);
     if(q.key!=='common')item.name=pickPrefix()+item.name;
     if(q.key==='unique')item.name=pickUniqueName();
@@ -2769,16 +2759,6 @@ function applyEquipStats(){
       player.skills.push({...sk});
       haveSkillKeys.add(sk.key);
     }
-  });
-  // 装备词条 extraSkill：把额外技能并入 player.skills（去重）
-  ['weapon','helm','armor','ring'].forEach(s=>{
-    const it = player.equip[s]; if(!it) return;
-    it.affixes.forEach(a=>{
-      if(a.k==='extraSkill' && a.skill && SKILL_DB[a.skill] && !haveSkillKeys.has(a.skill)){
-        player.skills.push({key:a.skill, ...SKILL_DB[a.skill], cdLeft:0});
-        haveSkillKeys.add(a.skill);
-      }
-    });
   });
   // 技能栏无限，不再截断
   if(player.activeSkill>=player.skills.length)player.activeSkill=0;
@@ -3821,13 +3801,17 @@ function spawnWave(){
     // ===== 散兵：随机分布在玩家周围 =====
   // 数量从原来 6 + min(20,wave) 提升到 12 + wave*1.5（不再硬截 20）
   scatterCnt = Math.floor(12 + waveLevel*1.5);
+  let hasEliteInWave = false; // 标记当前波次是否已有精英怪
   for(let i=0;i<scatterCnt;i++){
     const a=Math.random()*Math.PI*2, d=rand(22,60);
     const pos=new THREE.Vector3(
       clamp(p.x+Math.cos(a)*d,-95,95), 0,
       clamp(p.z+Math.sin(a)*d,-95,95)
     );
-    spawnEnemy(pickEnemyType(), waveLevel, pos, Math.random()<.08+waveLevel*.008, false);
+    // 确保每波至少有1个精英怪（在第一只散兵时强制生成精英）
+    const isElite = !hasEliteInWave && i===0 ? true : (Math.random()<.08+waveLevel*.008);
+    if(isElite) hasEliteInWave = true;
+    spawnEnemy(pickEnemyType(), waveLevel, pos, isElite, false);
   }
 
   // ===== 成群结队：每波 1-3 个怪群 =====
@@ -4549,6 +4533,16 @@ function tryPickup(){
     Audio.pickup(best.item.quality.key);
     if(settings.autoEquip) autoEquipBetter(best.item);
     rebuildInv();
+
+    // 触发背包按钮动画
+    const invBtn = document.getElementById('tInv');
+    if(invBtn){
+      invBtn.classList.remove('invPulse');
+      void invBtn.offsetWidth; // 强制重排，确保动画重新触发
+      invBtn.classList.add('invPulse');
+      setTimeout(()=>{ invBtn.classList.remove('invPulse'); }, 400);
+    }
+
     // 任务事件：拾取（仅装备计入"拾荒者"等任务）
     if(typeof Quests!=='undefined' && !best.item.isGem && !best.item.special){
       Quests.onEvent('pickup', {qualityKey: best.item.quality.key});
@@ -4809,6 +4803,30 @@ function findBestTarget(maxRange,preferFOV=false){
     }
   }
   return preferFOV ? (bestFOV||bestAny) : bestAny;
+}
+
+// 检测准心是否瞄准敌人（射线检测）
+function isAimingAtEnemy(){
+  if(!camera || !controls || !enemies || enemies.length === 0) return false;
+
+  const raycaster = new THREE.Raycaster();
+  const fwd = new THREE.Vector3();
+  camera.getWorldDirection(fwd);
+  raycaster.set(controls.getObject().position, fwd);
+  raycaster.far = 50; // 检测范围50米
+
+  // 收集所有敌人的mesh
+  const meshes = [];
+  enemies.forEach(e=>{
+    if(e.hp > 0 && e.mesh){
+      e.mesh.traverse((child)=>{
+        if(child.isMesh) meshes.push(child);
+      });
+    }
+  });
+
+  const intersects = raycaster.intersectObjects(meshes, false);
+  return intersects.length > 0;
 }
 
 // 计算"瞄向目标"的方向（自动瞄准核心）
@@ -5384,6 +5402,38 @@ function itemCompareSummary(it, cur){
          lines.join('') + scoreLine + `</div>`;
 }
 
+function bindClassTagTips(container){
+  if(!container) return;
+  const tags = container.querySelectorAll('.classTagTip');
+  tags.forEach(tag=>{
+    // 强制设置可交互样式（覆盖父元素可能的 pointer-events:none）
+    tag.style.pointerEvents = 'auto';
+    tag.style.cursor = 'pointer';
+    const handler = (e)=>{
+      e.stopPropagation();
+      e.preventDefault();
+      const ckey = tag.getAttribute('data-ctag');
+      if(!ckey || !CLASS_DB[ckey]) return;
+      const cls = CLASS_DB[ckey];
+      // 统计当前已装备的同流派数量
+      let count = 0;
+      ['weapon','helm','armor','ring'].forEach(s=>{
+        const eq = player.equip[s];
+        if(eq && eq.classTag === ckey) count++;
+      });
+      const activeMark = count >= 4 ? ' ✅ 已激活' : ` (${count}/4)`;
+      toast(`${cls.icon} ${cls.name}流派${activeMark}\n${cls.mastery}`, 2500);
+    };
+    // 移除旧的事件监听器（避免重复绑定）
+    tag.removeEventListener('click', tag._classTagHandler);
+    tag.removeEventListener('touchend', tag._classTagHandler);
+    tag._classTagHandler = handler;
+    tag.addEventListener('click', handler);
+    tag.addEventListener('touchend', handler, {passive:false});
+    tag.addEventListener('mousedown', (e)=>{ e.preventDefault(); }, {passive:false});
+  });
+}
+
 function showTip(it,x,y){
   // 合成面板打开时不要显示物品 tip，避免遮挡
   if(fusePanelEl && fusePanelEl.style.display==='flex'){ hideTip(); return; }
@@ -5395,49 +5445,14 @@ function showTip(it,x,y){
   }
   tipEl.innerHTML = _summaryPrefix + itemTipHtml(it);
   // 流派标签点击事件：显示精通效果（确保可交互）
-  (function bindClassTagTip(){
-    const tags = tipEl.querySelectorAll('.classTagTip');
-    tags.forEach(tag=>{
-      // 强制设置可交互样式（覆盖父元素可能的 pointer-events:none）
-      tag.style.pointerEvents = 'auto';
-      tag.style.cursor = 'pointer';
-      const handler = (e)=>{
-        e.stopPropagation();
-        e.preventDefault();
-        const ckey = tag.getAttribute('data-ctag');
-        if(!ckey || !CLASS_DB[ckey]) return;
-        const cls = CLASS_DB[ckey];
-        // 统计当前已装备的同流派数量
-        let count = 0;
-        ['weapon','helm','armor','ring'].forEach(s=>{
-          const eq = player.equip[s];
-          if(eq && eq.classTag === ckey) count++;
-        });
-        const masteryInfo = cls.mastery;
-        const activeMark = count >= 4 ? ' ✅ 已激活' : ` (${count}/4)`;
-        toast(`${cls.icon} ${cls.name}流派${activeMark}\n${masteryInfo}`, 2500);
-      };
-      tag.addEventListener('click', handler);
-      tag.addEventListener('touchend', handler, {passive:false});
-      tag.addEventListener('mousedown', (e)=>{ e.preventDefault(); }, {passive:false});
-    });
-    // 同步绑定对比面板(tipCmp)中的流派标签
+  bindClassTagTips(tipEl);
+
+  // 对比面板中的流派标签也需要绑定
+  if(cur && cur!==it){
     setTimeout(()=>{
-      const cmpTags = document.querySelectorAll('#tipCmp .classTagTip');
-      cmpTags.forEach(tag=>{
-        tag.style.pointerEvents = 'auto';
-        tag.style.cursor = 'pointer';
-        tag.onclick = ()=> {
-          const ckey = tag.getAttribute('data-ctag');
-          if(!ckey || !CLASS_DB[ckey]) return;
-          const cls = CLASS_DB[ckey];
-          let count = 0;
-          ['weapon','helm','armor','ring'].forEach(s=>{ const eq=player.equip[s]; if(eq&&eq.classTag===ckey) count++; });
-          toast(`${cls.icon} ${cls.name}流派${count>=4?' ✅ 已激活':` (${count}/4)`}\n${cls.mastery}`, 2500);
-        };
-      });
+      bindClassTagTips(tipCmpEl);
     }, 0);
-  })();
+  }
   // 先让 tip 显示出来才能测量真实尺寸
   tipEl.style.display='block';
   tipEl.style.left='-9999px';   // 临时隐藏出屏幕，避免一帧闪烁
@@ -5524,11 +5539,13 @@ function showTip(it,x,y){
   const cur=it.slot ? player.equip[it.slot] : null;
   if(cur && cur!==it){
     tipCmpEl.innerHTML=
-      `<div style="margin:-2px -8px 6px;padding:5px 8px;`+
-      `background:linear-gradient(90deg,transparent,rgba(232,196,90,.15),transparent);`+
-      `border-top:2px solid var(--gold);`+
-      `border-bottom:2px solid var(--gold);`+
-      `</div>`+
+      itemTipHtml(it) +
+      `<div style="margin:10px -8px;padding:0 8px;`+
+      `border-top:2px solid rgba(232,196,90,.3);`+
+      `display:flex;align-items:center;`+
+      `"><div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(232,196,90,.3),transparent)"></div>`+
+      `<span style="padding:0 10px;color:var(--gold);font-size:11px;letter-spacing:1px">当前装备</span>`+
+      `<div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(232,196,90,.3),transparent)"></div></div>`+
       itemTipHtml(cur);
     tipCmpEl.style.display='block';
     tipCmpEl.style.left='-9999px';
@@ -6820,7 +6837,7 @@ function makeItemAtQuality(slot, level, quality){
   const usedKeys = new Set();
   for(let i=0;i<cnt;i++){
     const af = rollAffix(level, usedKeys, quality.key);
-    usedKeys.add(af.k==='extraSkill' ? ('extraSkill:'+af.skill) : af.k);
+    usedKeys.add(af.k);
     item.affixes.push(af);
   }
   // 套装归属
@@ -6835,8 +6852,6 @@ function makeItemAtQuality(slot, level, quality){
     item.dmgMax = base[1]+Math.floor(level*1.6);
     item.atkSpd = WEAPON_TYPES[wt].atkSpd;
     item.skills = [...WEAPON_TYPES[wt].skills];
-    if(quality.key==='rare' || quality.key==='set') item.skills.push(pick(['nova','meteor','chain']));
-    if(quality.key==='unique'){ item.skills.push('meteor'); item.skills.push('chain'); }
     item.name = pick(WEAPON_NAMES[wt]);
     if(quality.key!=='common') item.name = pickPrefix()+item.name;
     if(quality.key==='unique') item.name = pickUniqueName();
@@ -7834,6 +7849,10 @@ function update(dt){
       // 防御性技能（治疗/护盾/铁壁姿态）不锁敌，由 castSkill 内部按生命/状态条件自行判定
       // 注意：nova 是范围攻击技能（不是防御技能），必须有敌人在范围内才释放，否则空放浪费蓝
       const need=!['heal','shield','haste'].includes(s.type);
+
+      // 新增：只有准心瞄准敌人时才自动攻击（防御性技能除外）
+      if(need && !isAimingAtEnemy()) continue;
+
       let t = null;
       if(need){
         if(s.type==='nova'){
