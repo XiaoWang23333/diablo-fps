@@ -1583,9 +1583,20 @@ const touchInput = { lx:0, ly:0, rx:0, ry:0 };
 
 
 function startOrResumeGame(){
+  try{
   // 死亡画面有自己的「复活」按钮，不要走这里
-  if(player._dead){ console.log('[start] player dead, ignore'); return; }
-  if(_starting){ console.log('[start] already starting, ignore'); return; }
+  if(player._dead){ 
+    console.log('[start] player dead, ignore'); 
+    // 安全网：如果死状态卡住了，强制重置
+    player._dead = false;
+    return; 
+  }
+  if(_starting){ 
+    console.log('[start] already starting, ignore'); 
+    // 安全网：如果 _starting 卡住了（比如之前的 setTimeout 没执行），500ms 后强制重置
+    setTimeout(()=>{ _starting = false; }, 500);
+    return; 
+  }
   _starting = true;
   console.log('[start] startOrResumeGame()');
 
@@ -1622,6 +1633,10 @@ function startOrResumeGame(){
   }
 
   setTimeout(()=>{ _starting = false; }, 250);
+  } catch(err){ 
+    console.error('[start] error:', err); 
+    _starting = false; // 出错也要重置标志位
+  }
 }
 
 // 开始游戏：必须点击"确定"按钮（或按 Space/Enter）后才进入
@@ -1630,9 +1645,14 @@ function _overlayHandler(ev){
   if(player._dead) return; // 死亡画面用「复活」按钮
   startOrResumeGame();
 }
-// 确定按钮（开始菜单核心入口）
-const _btnConfirmMode = document.getElementById('btnConfirmMode');
-if(_btnConfirmMode){
+// 确定按钮（开始菜单核心入口）—— 安全初始化：DOM 未就绪时延迟重试
+function initConfirmButton(){
+  const _btnConfirmMode = document.getElementById('btnConfirmMode');
+  if(!_btnConfirmMode){
+    console.warn('[initConfirmButton] btnConfirmMode not found, retrying...');
+    setTimeout(initConfirmButton, 100);
+    return;
+  }
   let _confirmFiring = false;
   const startFn = (e)=>{
     if(e){ e.stopPropagation(); if(e.preventDefault) e.preventDefault(); }
@@ -1650,6 +1670,13 @@ if(_btnConfirmMode){
   };
   _btnConfirmMode.addEventListener('click',     startFn);
   _btnConfirmMode.addEventListener('touchstart',startFn, {passive:false});
+  console.log('[initConfirmButton] btnConfirmMode bound');
+}
+// DOM 就绪后初始化（game.js 动态加载时 DOM 可能未完成解析）
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', initConfirmButton);
+} else {
+  initConfirmButton();
 }
 // 键盘兜底：开始/暂停菜单上按 Space/Enter 视为"确定开始"
 window.addEventListener('keydown', (e)=>{
@@ -8440,13 +8467,16 @@ function castUlt(){
   // 大招效果：对周围所有敌人造成大量伤害
   const ULT_RANGE = 25;      // 大招范围
   const ULT_DMG_BASE = 500;  // 基础伤害
-  const totalDmg = ULT_DMG_BASE + player.level * 80 + (player._strTotal + player._intTotal) * 3;
+  const totalDmg = ULT_DMG_BASE + player.level * 80 + ((player._strTotal||0) + (player._intTotal||0)) * 3;
   let hitCount = 0;
   enemies.forEach(e=>{
     if(e.hp<=0) return;
     const dist = e.mesh.position.distanceTo(controls.getObject().position);
     if(dist <= ULT_RANGE){
-      damageEnemy(e, {dmg:Math.round(totalDmg * (1 + (e.isElite?0.5:0) * (e.isBoss?0.3:1)), crit:true}, true);
+      var mult = 1;
+      if(e.isElite) mult += 0.5;
+      if(e.isBoss) mult += 0.3;
+      damageEnemy(e, {dmg:Math.round(totalDmg * mult), crit:true}, true);
       hitCount++;
     }
   });
