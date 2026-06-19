@@ -25,7 +25,16 @@
   .orb.hp .fill{background:radial-gradient(circle at 50% 30%,#ff6a6a,#8a0e0e 70%,#4a0606)}
   .orb.mp .fill{background:radial-gradient(circle at 50% 30%,#6ab2ff,#1a4a9e 70%,#0a1f4a)}
   .orb .lbl{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:bold;text-shadow:0 0 4px #000;font-size:14px;letter-spacing:1px}
-  #skillbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
+  #skillbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;position:relative}
+  /* 大招按钮 + 能量条 */
+  #ultimateBtn{width:58px;height:58px;border-radius:50%;border:3px solid #8a0e0e;background:radial-gradient(circle,#3a1a2a,#1a0a10);
+               display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;
+               box-shadow:0 0 12px rgba(138,14,238,.5);transition:all .3s;position:relative;pointer-events:auto}
+  #ultimateBtn.ready{border-color:#ffd700;box-shadow:0 0 20px rgba(255,215,0,.8);animation:ultPulse 1.2s ease-in-out infinite}
+  #ultimateBtn.ready:hover{transform:scale(1.1)}
+  #ultimateBtn .ultEnergy{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(to top,#8a0e0e,#ffd700);
+                         border-radius:50%;transition:height .2s;z-index:-1;opacity:.4}
+  @keyframes ultPulse{0%,100%{box-shadow:0 0 20px rgba(255,215,0,.8)}50%{box-shadow:0 0 35px rgba(255,215,0,1)}}
   #expbar{width:100%;max-width:680px;height:10px;background:#0c0c0c;border:1px solid #333;border-radius:3px;overflow:hidden;transition:box-shadow .2s;position:relative}
   #expbar>div{height:100%;width:0;background:linear-gradient(90deg,#e8c45a,#fff5b8);box-shadow:0 0 6px #e8c45a inset;transition:width .6s cubic-bezier(.3,1.5,.6,1)}
   #expLvl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9px;color:#fff;text-shadow:0 0 3px #000;font-weight:bold;pointer-events:none;white-space:nowrap}
@@ -380,11 +389,17 @@
   #tFnRow .tInvBig{padding-bottom:10px;line-height:1}
   /* 背包按钮拾取动画 */
   @keyframes invButtonPulse{
-    0%{transform:scale(1)}
-    50%{transform:scale(1.3)}
-    100%{transform:scale(1)}
+    0%{transform:scale(1); box-shadow:0 0 0px rgba(232,196,90,0)}
+    25%{transform:scale(1.4); box-shadow:0 0 15px rgba(232,196,90,0.8)}
+    50%{transform:scale(1.1); box-shadow:0 0 8px rgba(232,196,90,0.5)}
+    75%{transform:scale(1.3); box-shadow:0 0 12px rgba(232,196,90,0.7)}
+    100%{transform:scale(1); box-shadow:0 0 0px rgba(232,196,90,0)}
   }
-  #tInv.invPulse{animation:invButtonPulse .4s ease-in-out}
+  #tInv.invPulse{
+    animation:invButtonPulse .6s ease-in-out;
+    border-color:#e8c45a !important;
+    color:#e8c45a !important;
+  }
   #tAuto.on, #tJump.on{border-color:var(--green);box-shadow:0 0 10px rgba(123,217,106,.7);color:#7bd96a}
 
   /* ========== 模式响应式 HUD ========== */
@@ -617,6 +632,11 @@
     <div id="expbar"><div id="expFill"></div><span id="expLvl"></span></div>
     <div id="skills"></div>
   </div>
+  <!-- 大招按钮 -->
+  <div id="ultimateBtn" title="大招（Ctrl键释放）">
+    <div class="ultEnergy" id="ultEnergy"></div>
+    <span>⚡</span>
+  </div>
   <div class="orb mp"><div class="fill" id="mpFill" style="height:100%"></div><div class="lbl" id="mpLbl">50/50</div></div>
 </div>
 <div id="invPanel">
@@ -636,7 +656,7 @@
     <label><input type="checkbox" id="optAutoEquip"/> 自动换装</label>
     <button id="btnFuse" class="tgl">⚗ 5 合 1 合成</button>
     <button id="btnSocket" class="tgl">💎 宝石镶嵌</button>
-    <span id="fuseHint" style="font-size:11px;color:#888"></span>
+    <button id="btnInvAbility" class="tgl">📊 已选能力</button>
   </div>
   <div id="invTabBar">
     <button class="invTab active" data-cat="all">📦 全部</button>

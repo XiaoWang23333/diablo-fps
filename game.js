@@ -1067,6 +1067,12 @@ const player={
   shield:0,shieldMax:0,shieldT:0,hasteT:0,dmgReduce:0,
   equip:{weapon:null,helm:null,armor:null,ring:null},
   inv:[],skills:[],activeSkill:0,
+  // 大招系统
+  ultEnergy:0,        // 当前能量 0-100
+  ultEnergyMax:100,    // 能量上限
+  ultReady:false,       // 是否就绪可释放
+  ultCooldown:0,      // 冷却时间（秒）
+  ultCooldownMax:30,   // 冷却时间上限
 };
 
 const keys={};
@@ -2173,32 +2179,32 @@ const SET_DB = {
 const SET_KEYS=Object.keys(SET_DB);
 
 const AFFIX_POOL=[
-  // 基础属性
-  {k:'str',name:'+{v}力量',roll:[2,8]},
-  {k:'dex',name:'+{v}敏捷',roll:[2,8]},
-  {k:'int',name:'+{v}智力',roll:[2,8]},
-  // 资源 / 防御
-  {k:'hpMax',name:'+{v}最大生命',roll:[10,40]},
-  {k:'mpMax',name:'+{v}最大法力',roll:[5,25]},
-  {k:'armor',name:'+{v}护甲',roll:[3,15]},
-  // 进攻
-  {k:'dmgPct',name:'+{v}%伤害',roll:[5,25]},
-  {k:'critChance',name:'+{v}%暴击率',roll:[3,12]},
-  {k:'critDmg',name:'+{v}%暴击伤害',roll:[10,50]},
+  // 基础属性（提高数值，与3选1能力持平）
+  {k:'str',name:'+{v}力量',roll:[10,25]},
+  {k:'dex',name:'+{v}敏捷',roll:[10,25]},
+  {k:'int',name:'+{v}智力',roll:[10,25]},
+  // 资源 / 防御（提高数值）
+  {k:'hpMax',name:'+{v}最大生命',roll:[30,90]},
+  {k:'mpMax',name:'+{v}最大法力',roll:[15,50]},
+  {k:'armor',name:'+{v}护甲',roll:[8,25]},
+  // 进攻（提高数值，与3选1能力持平甚至更高）
+  {k:'dmgPct',name:'+{v}%伤害',roll:[8,30]},
+  {k:'critChance',name:'+{v}%暴击率',roll:[5,18]},
+  {k:'critDmg',name:'+{v}%暴击伤害',roll:[20,60]},
   // 续航
-  {k:'lifeOnHit',name:'命中回复{v}生命',roll:[1,4]},
-  {k:'hpRegen',name:'每秒+{v}生命',roll:[1,4]},
-  {k:'mpRegen',name:'每秒+{v}法力',roll:[1,3]},
+  {k:'lifeOnHit',name:'命中回复{v}生命',roll:[2,8]},
+  {k:'hpRegen',name:'每秒+{v}生命',roll:[2,8]},
+  {k:'mpRegen',name:'每秒+{v}法力',roll:[2,6]},
   // 新增进阶词条
-  {k:'allStats',name:'全属性+{v}',roll:[2,6]},
-  {k:'moveSpd',name:'+{v}%移动速度',roll:[3,12]},
-  {k:'cdr',name:'+{v}%技能急速',roll:[3,12]},
-  {k:'fireDmg',name:'+{v}%火焰伤害',roll:[10,30]},
-  {k:'iceDmg',name:'+{v}%冰霜伤害',roll:[10,30]},
-  {k:'lightDmg',name:'+{v}%闪电伤害',roll:[10,30]},
-  {k:'thorns',name:'反伤{v}伤害',roll:[5,20]},
-  {k:'goldFind',name:'+{v}%物品获取',roll:[10,40]},
-  {k:'expBonus',name:'+{v}%经验加成',roll:[5,20]},
+  {k:'allStats',name:'全属性+{v}',roll:[5,15]},
+  {k:'moveSpd',name:'+{v}%移动速度',roll:[5,20]},
+  {k:'cdr',name:'+{v}%技能急速',roll:[5,20]},
+  {k:'fireDmg',name:'+{v}%火焰伤害',roll:[15,40]},
+  {k:'iceDmg',name:'+{v}%冰霜伤害',roll:[15,40]},
+  {k:'lightDmg',name:'+{v}%闪电伤害',roll:[15,40]},
+  {k:'thorns',name:'反伤{v}伤害',roll:[10,30]},
+  {k:'goldFind',name:'+{v}%物品获取',roll:[15,50]},
+  {k:'expBonus',name:'+{v}%经验加成',roll:[10,30]},
 ];
 
 // ---------- 宝石 ----------
@@ -3591,6 +3597,49 @@ function makeHpBarTex(ratio,color){
   ctx.strokeStyle='#000';ctx.strokeRect(0,0,128,10);
   const t=new THREE.CanvasTexture(c);t.needsUpdate=true;return t;
 }
+// 创建文字精灵（用于敌人头顶名字等）
+function makeTextSprite(text, options={
+  fontSize:14, color:'#ffffff', bgColor:'rgba(0,0,0,0.5)', padding:4
+}){
+  const fontSize = options.fontSize || 14;
+  const color = options.color || '#ffffff';
+  const bgColor = options.bgColor || 'rgba(0,0,0,0.5)';
+  const padding = options.padding || 4;
+  
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // 测量文字宽度
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  const metrics = ctx.measureText(text);
+  const textWidth = metrics.width;
+  const textHeight = fontSize;
+  
+  canvas.width = textWidth + padding * 2;
+  canvas.height = textHeight + padding * 2;
+  
+  // 背景
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // 文字
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width/2, canvas.height/2);
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const spriteMaterial = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false
+  });
+  const sprite = new THREE.Sprite(spriteMaterial);
+  return sprite;
+}
 
 function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   const def=ENEMY_TYPES[type];
@@ -3628,6 +3677,14 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   if(isBoss){mesh.scale.setScalar(1.8);tintEnemyBody(mesh,0xff2020,.8);}
   const hpBar=new THREE.Sprite(new THREE.SpriteMaterial({map:makeHpBarTex(1,isBoss?'#ff3030':isElite?'#c08aff':'#ff7070'),depthTest:false,transparent:true}));
   hpBar.scale.set(isBoss?3:2,isBoss?0.04:.18,1);hpBar.position.y=isBoss?3.5:2.7;mesh.add(hpBar);e.hpBar=hpBar;
+  // 精英/Boss 头顶显示名字
+  if(isElite || isBoss){
+    const nameSprite = makeTextSprite(e.name, {fontSize:14, color: isBoss?'#ff4444':'#c08aff'});
+    nameSprite.scale.set(3,0.6,1);
+    nameSprite.position.y = (isBoss?4.2:3.2);
+    mesh.add(nameSprite);
+    e.nameSprite = nameSprite;
+  }
   // BOSS 始终显示血条；普通敌人/精英默认隐藏，受伤后才显示
   e.hpBarVisibleTimer = 0;       // >0 时显示；每帧递减到 0 后隐藏
   if(!isBoss){
@@ -4506,6 +4563,17 @@ function dropLoot(pos,level,isElite,isBoss){
     spawnMagnetScroll(pos);
   }
 }
+// 统一的背包按钮动画触发函数
+function triggerInvButtonAnim(){
+  const invBtn = document.getElementById('tInv');
+  if(invBtn){
+    invBtn.classList.remove('invPulse');
+    void invBtn.offsetWidth; // 强制重排，确保动画重新触发
+    invBtn.classList.add('invPulse');
+    setTimeout(()=>{ invBtn.classList.remove('invPulse'); }, 600);
+  }
+}
+
 function tryPickup(){
   const p=controls.getObject().position;
   let best=null,bd=4;
@@ -4540,7 +4608,7 @@ function tryPickup(){
       invBtn.classList.remove('invPulse');
       void invBtn.offsetWidth; // 强制重排，确保动画重新触发
       invBtn.classList.add('invPulse');
-      setTimeout(()=>{ invBtn.classList.remove('invPulse'); }, 400);
+      setTimeout(()=>{ invBtn.classList.remove('invPulse'); }, 600);
     }
 
     // 任务事件：拾取（仅装备计入"拾荒者"等任务）
@@ -5940,10 +6008,10 @@ function findAllFusableGroups(){
       groups.push({kind:'equip', qualityKey:q, indices: arr.slice(off, off+FUSE_N)});
     }
   }
-  // ===== 3) 宝石：3 个同等级任意类型 → 1 个高一级宝石（type 随机）=====
-  // 完美宝石（grade 2）已是最高级，3 个完美 → 1 个随机类型完美（自循环，不再升级）
+  // ===== 3) 宝石：5 个同等级任意类型 → 1 个高一级宝石（type 随机）=====
+  // 完美宝石（grade 2）已是最高级，5 个完美 → 1 个随机类型完美（自循环，不再升级）
   // 仅按 grade 分桶；产物的 type 在 executeFuseWithAnim 中随机
-  const GEM_FUSE_N = 3;
+  const GEM_FUSE_N = 5;
   const MAX_GEM_GRADE = GEM_GRADES.length - 1;   // 2 = 完美
   const gemByGrade = {};   // grade -> [inv idx, ...]
   for(let i=0;i<player.inv.length;i++){
@@ -7073,7 +7141,7 @@ function rebuildInv(){
           ev.stopPropagation();
           const r = d.getBoundingClientRect();
           showItemTipWithActions(it, i, r.left + r.width/2, r.top);
-          return;
+          return; // 触屏模式：显示操作按钮后直接返回，不执行后面的逻辑
         }
         if(it.isGem){
           // 宝石点击 → 弹"选孔位"快速选择浮窗（v0.22 新交互）
@@ -7554,6 +7622,19 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
   const bs = document.getElementById('btnSort');
   if(bs) bs.addEventListener('click', sortInv);
 }
+// 大招按钮绑定
+{
+  const ub = document.getElementById('ultimateBtn');
+  if(ub) ub.addEventListener('click', castUlt);
+}
+// 键盘快捷键：Ctrl 键释放大招
+document.addEventListener('keydown', e=>{
+  if(e.code==='ControlLeft' || e.code==='ControlRight'){
+    if(!gamePaused && controls.isLocked && player.hp>0){
+      castUlt();
+    }
+  }
+});
 // 背包分类 Tab 绑定（默认 'all' 已在 setInvCategory 体现）
 {
   document.querySelectorAll('#invTabBar .invTab').forEach(btn=>{
@@ -7584,6 +7665,22 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
     else if(e.code==='ArrowLeft'  || e.code==='KeyA'){ gemUseNavMoveSlot(-1); }
     else if(e.code==='ArrowRight' || e.code==='KeyD'){ gemUseNavMoveSlot( 1); }
     else if(e.code==='Enter' || e.code==='Space'){ gemUseNavConfirm(); }
+  });
+}
+// 背包工具栏「已选能力」按钮
+{
+  const ab = document.getElementById('btnInvAbility');
+  if(ab) ab.addEventListener('click', ()=>{
+    const panel = document.getElementById('abilityPanel');
+    if(!panel) return;
+    if(panel.style.display==='block'){
+      panel.style.display='none';
+      gamePaused = false;
+    } else {
+      renderAbilityPanel();
+      panel.style.display='block';
+      gamePaused = true;
+    }
   });
 }
 // 合成面板的关闭按钮 + ESC 键
@@ -8285,6 +8382,22 @@ function update(dt){
   // 回血回蓝
   if(player.hp>0&&player.hp<player.hpMax)player.hp=Math.min(player.hpMax,player.hp+player.hpRegen*dt);
   if(player.mp<player.mpMax)player.mp=Math.min(player.mpMax,player.mp+player.mpRegen*dt);
+  // 大招充能（战斗中持续充能）
+  if(!player._dead && enemies.length>0){
+    player.ultEnergy = Math.min(player.ultEnergyMax, player.ultEnergy + 2.5*dt); // 约40秒充满
+  }
+  // 大招就绪判定
+  player.ultReady = (player.ultEnergy >= player.ultEnergyMax);
+  // 大招冷却
+  if(player.ultCooldown>0){
+    player.ultCooldown -= dt;
+    if(player.ultCooldown<=0){
+      player.ultCooldown = 0;
+      player.ultEnergy = 0; // 冷却结束，重新开始充能
+    }
+  }
+  // 更新大招UI
+  updateUltUI();
   // 防御性状态计时衰减
   if((player.shieldT||0)>0){
     player.shieldT-=dt;
@@ -8296,6 +8409,119 @@ function update(dt){
   }
   refreshInfo();
   drawMinimap();
+}
+
+// ==================== 大招系统 ====================
+function updateUltUI(){
+  const btn = document.getElementById('ultimateBtn');
+  const energy = document.getElementById('ultEnergy');
+  if(!btn || !energy) return;
+  const pct = player.ultEnergy / player.ultEnergyMax * 100;
+  energy.style.height = pct + '%';
+  if(player.ultReady && player.ultCooldown===0){
+    btn.classList.add('ready');
+    btn.title = '大招就绪！点击释放（或按Ctrl键）';
+  } else {
+    btn.classList.remove('ready');
+    if(player.ultCooldown>0){
+      btn.title = `大招冷却中…${Math.ceil(player.ultCooldown)}秒`;
+    } else {
+      btn.title = `大招充能中…${Math.floor(pct)}%`;
+    }
+  }
+}
+
+// 释放大招
+function castUlt(){
+  if(!player.ultReady || player.ultCooldown>0 || player.hp<=0) return;
+  if(gamePaused || !controls.isLocked) return;
+  player.ultReady = false;
+  player.ultCooldown = player.ultCooldownMax;
+  // 大招效果：对周围所有敌人造成大量伤害
+  const ULT_RANGE = 25;      // 大招范围
+  const ULT_DMG_BASE = 500;  // 基础伤害
+  const totalDmg = ULT_DMG_BASE + player.level * 80 + (player._strTotal + player._intTotal) * 3;
+  let hitCount = 0;
+  enemies.forEach(e=>{
+    if(e.hp<=0) return;
+    const dist = e.mesh.position.distanceTo(controls.getObject().position);
+    if(dist <= ULT_RANGE){
+      damageEnemy(e, {dmg:Math.round(totalDmg * (1 + (e.isElite?0.5:0) * (e.isBoss?0.3:1)), crit:true}, true);
+      hitCount++;
+    }
+  });
+  // 大招动画效果
+  spawnUltAnimation();
+  // 提示
+  toast(`⚡ 大招释放！造成 ${Math.round(totalDmg)} 伤害，命中 ${hitCount} 个敌人`);
+  Audio.cast_aoe && Audio.cast_aoe();
+}
+
+// 大招动画
+function spawnUltAnimation(){
+  const pos = controls.getObject().position.clone();
+  pos.y = 0.1;
+  // 金色冲击波环
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.1, 25, 64),
+    new THREE.MeshBasicMaterial({color:0xffd700, transparent:true, opacity:0.9, side:THREE.DoubleSide})
+  );
+  ring.rotation.x = -Math.PI/2;
+  ring.position.copy(pos);
+  scene.add(ring);
+  // 动画：扩大+淡出
+  const startTime = performance.now();
+  function animRing(){
+    const t = (performance.now() - startTime) / 1000; // 秒
+    if(t > 1.2) { scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); return; }
+    const s = 1 + t * 20; // 扩大到25米
+    ring.scale.set(s, s, s);
+    ring.material.opacity = 0.9 * (1 - t/1.2);
+    requestAnimationFrame(animRing);
+  }
+  animRing();
+  // 中心闪光
+  const flash = new THREE.Mesh(
+    new THREE.CircleGeometry(3, 32),
+    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:1, side:THREE.DoubleSide})
+  );
+  flash.rotation.x = -Math.PI/2;
+  flash.position.copy(pos);
+  flash.position.y = 0.15;
+  scene.add(flash);
+  const flashStart = performance.now();
+  function animFlash(){
+    const t = (performance.now() - flashStart) / 1000;
+    if(t > 0.5) { scene.remove(flash); flash.geometry.dispose(); flash.material.dispose(); return; }
+    flash.material.opacity = 1 - t/0.5;
+    flash.scale.set(1+t*3, 1+t*3, 1+t*3);
+    requestAnimationFrame(animFlash);
+  }
+  animFlash();
+  // 粒子效果（简易版）
+  for(let i=0; i<30; i++){
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 4, 4),
+      new THREE.MeshBasicMaterial({color:Math.random()>0.5?0xffd700:0xffffff, transparent:true, opacity:0.9})
+    );
+    p.position.copy(pos);
+    p.position.y += Math.random()*2;
+    const angle = Math.random()*Math.PI*2;
+    const speed = 8 + Math.random()*12;
+    const vx = Math.cos(angle)*speed, vz = Math.sin(angle)*speed;
+    scene.add(p);
+    const pStart = performance.now();
+    function animP(){
+      const t = (performance.now() - pStart) / 1000;
+      if(t > 1.0) { scene.remove(p); p.geometry.dispose(); p.material.dispose(); return; }
+      p.position.x += vx * 0.016;
+      p.position.z += vz * 0.016;
+      p.position.y -= 0.03;
+      p.material.opacity = 0.9 * (1 - t/1.0);
+      requestAnimationFrame(animP);
+    }
+    animP();
+  }
 }
 
 // ===================== 自适应画质（PerfMon）=====================
