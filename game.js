@@ -1,4 +1,4 @@
-// Diablo · FPS · Auto —— 第一人称自动战斗 ARPG 原型
+﻿// Diablo · FPS · Auto —— 第一人称自动战斗 ARPG 原型
 // 使用全局 THREE (UMD)，自带迷你 PointerLockControls 实现，无需任何服务器/模块系统
 
 // ====== 版本号（用于排查问题时确认浏览器是否加载到了最新版本） ======
@@ -1703,6 +1703,8 @@ const ABILITY_POOL = [
   {id:'sk_iceshard', name:'冰晶术',     ico:'❄', type:'newSkill',  skill:'iceshard',rarity:1, desc:'获得「冰晶术」：发射冰晶贯穿目标，减速敌人。'},
   {id:'sk_heal',     name:'治疗术',     ico:'✚', type:'newSkill',  skill:'heal',    rarity:1, desc:'获得「治疗术」：立即恢复一定生命值。'},
   {id:'sk_barrier',  name:'守护护盾',   ico:'🛡', type:'newSkill',  skill:'barrier', rarity:1, desc:'获得「守护护盾」：生成可吸收伤害的护盾。'},
+  {id:'sk_bolt',     name:'穿刺箭',     ico:'➹', type:'newSkill',  skill:'bolt',    rarity:1, desc:'获得「穿刺箭」：高速箭矢穿透路径上所有敌人。'},
+  {id:'sk_warcry',   name:'铁壁姿态',   ico:'🪖', type:'newSkill',  skill:'warcry',  rarity:2, desc:'获得「铁壁姿态」：大幅降低受到的伤害，生存向。'},
 
   // ---- 技能强化（强化已有技能）----
   {id:'ex_proj1',  name:'额外投射物+1', ico:'🎯', type:'skillBuff', buff:'extraProj', val:1, rarity:2, desc:'所有远程技能额外+1发投射物。'},
@@ -1777,15 +1779,18 @@ function applyAbility(ability){
       if(ability.skill && SKILL_DB[ability.skill]){
         const have = player.skills.some(s=>s.key===ability.skill);
         if(!have){
+          // 技能栏无限 → 直接添加新技能
           player.skills.push({key:ability.skill, ...SKILL_DB[ability.skill], cdLeft:0});
-          if(player.skills.length>8) player.skills.length=8;
           refreshSkillBar();
           toast(`获得技能：${ability.name}`);
         } else {
-          // 已有该技能，降低其CD作为补偿
+          // 已有该技能 → 给予该技能专属强化（CD-30%+伤害+20%）
           const sk = player.skills.find(s=>s.key===ability.skill);
-          if(sk) sk.cd = Math.max(0.3, sk.cd*0.85);
-          toast(`${ability.name} CD缩短！`);
+          if(sk) {
+            sk.cd = Math.max(0.2, sk.cd * 0.7);
+            sk._dmgBonus = (sk._dmgBonus || 0) + 0.2;
+          }
+          toast(`${ability.name} 强化！CD-30% 伤害+20%`);
         }
       }
       break;
@@ -1855,15 +1860,38 @@ function showAbilitySelectPanel(){
   panel.innerHTML = html;
   panel.style.display = 'block';
 
-  // 绑定卡片点击
+  // 绑定卡片点击（需二次确认防误触）
   panel.querySelectorAll('.abilCard').forEach(card=>{
     const idx = +card.getAttribute('data-idx');
     const handler = (e)=>{
       e.stopPropagation();
       const a = picks[idx];
       if(!a) return;
-      applyAbility(a);
-      hideAbilitySelectPanel();
+      // 二次确认对话框
+      const confirmHtml = `
+        <div id="abilConfirm" style="position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center">
+          <div style="background:#15110b;border:2px solid var(--gold);border-radius:8px;padding:20px 24px;max-width:340px;text-align:center;box-shadow:0 0 40px rgba(232,196,90,.4)">
+            <div style="font-size:15px;color:#ddd;margin-bottom:10px">确认选择此项能力？</div>
+            <div style="font-size:18px;color:${a.rarity===3?'#e8c45a':a.rarity===2?'#f4e26b':'#5aa6ff'};font-weight:bold;margin-bottom:14px">${a.ico} ${a.name}</div>
+            <div style="font-size:12px;color:#aaa;margin-bottom:16px;line-height:1.5">${a.desc}</div>
+            <div style="display:flex;gap:12px;justify-content:center">
+              <button id="abilConfirmOk" style="padding:10px 24px;background:linear-gradient(#3a2a14,#241d10);border:2px solid var(--gold);border-radius:6px;color:var(--gold);font-size:14px;font-weight:bold;cursor:pointer;font-family:inherit">✓ 确认</button>
+              <button id="abilConfirmCancel" style="padding:10px 24px;background:#1a1410;border:1px solid #555;border-radius:6px;color:#ccc;font-size:14px;cursor:pointer;font-family:inherit">取消</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.insertAdjacentHTML('beforeend', confirmHtml);
+      const dialog = document.getElementById('abilConfirm');
+      const onOk = ()=> {
+        dialog.remove();
+        applyAbility(a);
+        hideAbilitySelectPanel();
+      };
+      const onCancel = ()=> { dialog.remove(); };
+      document.getElementById('abilConfirmOk').addEventListener('click', onOk);
+      document.getElementById('abilConfirmOk').addEventListener('touchend', (ev)=>{ ev.preventDefault(); onOk(); }, {passive:false});
+      document.getElementById('abilConfirmCancel').addEventListener('click', onCancel);
+      document.getElementById('abilConfirmCancel').addEventListener('touchend', (ev)=>{ ev.preventDefault(); onCancel(); }, {passive:false});
     };
     card.addEventListener('click', handler);
     card.addEventListener('touchend', (e)=>{ e.preventDefault(); handler(e); }, {passive:false});
@@ -2725,8 +2753,7 @@ function applyEquipStats(){
       }
     });
   });
-  // 最多 8 个主动技能槽，超出截断（避免 UI 溢出）
-  if(player.skills.length>8) player.skills.length = 8;
+  // 技能栏无限，不再截断
   if(player.activeSkill>=player.skills.length)player.activeSkill=0;
   refreshSkillBar();refreshInfo();refreshEquip();
   // 重建第一人称手持武器（每次装备/换武器都会调用）
@@ -3663,8 +3690,9 @@ function showWaveResultPanel(){
 
   // 评价等级
   let evalText = '', evalColor = '';
-  if(st.danger){
-    evalText = '⚠ 危险！'; evalColor = '#ff5050';
+  const diedThisWave = (st.deaths || 0) > 0;
+  if(diedThisWave || st.danger){
+    evalText = diedThisWave ? `💀 死亡 ${st.deaths} 次` : '⚠ 危险！'; evalColor = '#ff5050';
   } else if(st.time < 30){
     evalText = '⚡ 速通！'; evalColor = '#ffeb3b';
   } else if(st.damage < player.hpMax * 0.2){
@@ -3733,6 +3761,7 @@ function recordWaveDamage(srcType, dmg){
 function startWaveStats(wave){
   _waveActive = true;
   _waveStats.killTotalStart = player.killCount || 0;
+  _waveStats.deathStart   = player.deathCount || 0;
   _waveStats.damageTaken   = 0;
   _waveStats.maxHitSrc     = null;
   _waveStats.maxHitDmg     = 0;
@@ -3749,6 +3778,7 @@ function endWaveStats(){
   const damage = _waveStats.damageTaken;
   const timeSec = Math.floor((now - _waveStats.startTime) / 1000);
   const hpPct = player.hp / player.hpMax;
+  const waveDeaths = (player.deathCount || 0) - (_waveStats.deathStart || 0);
   _lastWaveResult = {
     wave: _waveStats.waveLevel,
     kills,
@@ -3757,6 +3787,7 @@ function endWaveStats(){
     maxHitDmg: _waveStats.maxHitDmg,
     time: timeSec,
     danger: hpPct < 0.3 && damage > player.hpMax * 0.5,
+    deaths: waveDeaths,
   };
 }
 // ===== 波次结算系统结束 =====
@@ -4587,6 +4618,8 @@ function _doOneLevelUp(){
   player.exp-=player.expNeed; player.level++;
   player.expNeed=Math.floor(50*Math.pow(1.25,player.level-1));
   player.str+=2; player.dex+=2; player.int+=2;
+  // 每升1级增加1格背包上限
+  INV_CAP += 1;
   applyEquipStats();
   player.hp=player.hpMax; player.mp=player.mpMax;
   Audio.levelUp();
@@ -4608,6 +4641,9 @@ hideAbilitySelectPanel = function(){
 function heal(v){player.hp=Math.min(player.hpMax,player.hp+v);}
 function damagePlayer(v, source){
   if(player.invuln>0)return;
+  // 背包/合成/镶嵌面板打开时，锁死伤害防止突然死亡
+  if(invPanel && invPanel.style.display==='block') return;
+  if(typeof fusePanelEl!=='undefined' && fusePanelEl && fusePanelEl.style.display==='flex') return;
   // 比例减伤（替代旧的线性 armor/2）：减伤% = armor/(armor+K)，K 随等级增长
   // → 堆护甲呈递减收益、永不溢出，且后期需要更多护甲才能维持（护甲也随装备成长）。硬上限 85%
   const K = 50 + player.level*10;
@@ -4942,8 +4978,33 @@ function refreshInfo(){
 }
 function refreshSkillBar(){
   const wrap=document.getElementById('skills');wrap.innerHTML='';
-  // 动态匹配玩家实际技能数（最少显示 4 格保留视觉对齐，最多 8）
-  const n = Math.max(4, Math.min(8, player.skills.length));
+  // 技能栏无限：显示所有技能（最少 4 格保留视觉对齐）
+  const n = Math.max(4, player.skills.length);
+  
+  // 根据技能数量动态调整技能格尺寸
+  let slotSize = 62;
+  let fontSize = 11;
+  let icoSize = 22;
+  if(n > 12) { slotSize = 48; fontSize = 10; icoSize = 18; }
+  else if(n > 8) { slotSize = 56; fontSize = 10; icoSize = 20; }
+  
+  // 设置动态样式
+  const styleId = 'dynamicSkillStyle';
+  let styleEl = document.getElementById(styleId);
+  if(!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `
+    #skills .slot {
+      width: ${slotSize}px !important;
+      height: ${slotSize}px !important;
+      font-size: ${fontSize}px !important;
+    }
+    #skills .slot .ico { font-size: ${icoSize}px !important; }
+  `;
+  
   for(let i=0;i<n;i++){
     const s=player.skills[i];
     const d=document.createElement('div');
@@ -5244,15 +5305,15 @@ function itemCompareSummary(it, cur){
     const arrow = d>0.5 ? `<span style="color:#7bd96a">↑+${r.fmt(d)}</span>`
                 : d<-0.5 ? `<span style="color:#ff7070">↓${r.fmt(d)}</span>`
                 : `<span style="color:#888">—</span>`;
-    lines.push(`<div style="display:flex;justify-content:space-between;font-size:12px;line-height:1.55">`+
-               `<b style="color:#ddd">${r.label}</b>`+
+    lines.push(`<div style="display:flex;font-size:12px;line-height:1.55">`+
+               `<b style="color:#ddd;min-width:58px;flex-shrink:0">${r.label}</b>`+
                `<span><span style="color:#888">${r.fmt(curV)} → </span><b style="color:#fff">${r.fmt(newV)}</b>　${arrow}</span>`+
                `</div>`);
     if(lines.length>=6) break;   // 控制最多 6 行
   }
   // 评分行（核心）
-  const scoreLine = `<div style="display:flex;justify-content:space-between;font-size:13px;line-height:1.55;margin-top:4px;padding-top:4px;border-top:1px solid #3a2f18">`+
-                    `<b style="color:var(--gold)">评分</b>`+
+  const scoreLine = `<div style="display:flex;font-size:13px;line-height:1.55;margin-top:4px;padding-top:4px;border-top:1px solid #3a2f18">`+
+                    `<b style="color:var(--gold);min-width:58px;flex-shrink:0">评分</b>`+
                     `<span><b style="color:#fff">${sCur}</b><span style="color:#888"> → </span><b style="color:var(--gold)">${sNew}</b></span>`+
                     `</div>`;
   if(lines.length===0 && !cur){
@@ -5275,12 +5336,16 @@ function showTip(it,x,y){
     _summaryPrefix = itemCompareSummary(it, _curEq);
   }
   tipEl.innerHTML = _summaryPrefix + itemTipHtml(it);
-  // 流派标签点击事件：显示精通效果
+  // 流派标签点击事件：显示精通效果（确保可交互）
   (function bindClassTagTip(){
     const tags = tipEl.querySelectorAll('.classTagTip');
     tags.forEach(tag=>{
+      // 强制设置可交互样式（覆盖父元素可能的 pointer-events:none）
+      tag.style.pointerEvents = 'auto';
+      tag.style.cursor = 'pointer';
       const handler = (e)=>{
         e.stopPropagation();
+        e.preventDefault();
         const ckey = tag.getAttribute('data-ctag');
         if(!ckey || !CLASS_DB[ckey]) return;
         const cls = CLASS_DB[ckey];
@@ -5295,8 +5360,25 @@ function showTip(it,x,y){
         toast(`${cls.icon} ${cls.name}流派${activeMark}\n${masteryInfo}`, 2500);
       };
       tag.addEventListener('click', handler);
-      tag.addEventListener('touchend', (e)=>{ e.preventDefault(); handler(e); }, {passive:false});
+      tag.addEventListener('touchend', handler, {passive:false});
+      tag.addEventListener('mousedown', (e)=>{ e.preventDefault(); }, {passive:false});
     });
+    // 同步绑定对比面板(tipCmp)中的流派标签
+    setTimeout(()=>{
+      const cmpTags = document.querySelectorAll('#tipCmp .classTagTip');
+      cmpTags.forEach(tag=>{
+        tag.style.pointerEvents = 'auto';
+        tag.style.cursor = 'pointer';
+        tag.onclick = ()=> {
+          const ckey = tag.getAttribute('data-ctag');
+          if(!ckey || !CLASS_DB[ckey]) return;
+          const cls = CLASS_DB[ckey];
+          let count = 0;
+          ['weapon','helm','armor','ring'].forEach(s=>{ const eq=player.equip[s]; if(eq&&eq.classTag===ckey) count++; });
+          toast(`${cls.icon} ${cls.name}流派${count>=4?' ✅ 已激活':` (${count}/4)`}\n${cls.mastery}`, 2500);
+        };
+      });
+    }, 0);
   })();
   // 先让 tip 显示出来才能测量真实尺寸
   tipEl.style.display='block';
@@ -7131,13 +7213,13 @@ function spawnDmgText(worldPos,val,crit){
   const fontSize = crit ? Math.min(38, 22+Math.floor(absVal/50)) : Math.min(26, 14+Math.floor(absVal/80));
   d.style.cssText=`position:fixed;left:${x}px;top:${y}px;z-index:19;pointer-events:none;
     font-size:${fontSize}px;font-weight:bold;letter-spacing:1px;
-    color:${crit?'#ff3a3a':'#ffffff'};
-    text-shadow:${crit?'0 0 8px #ff0000,0 0 20px #ff5050':'0 0 4px rgba(0,0,0,.8)'};
+    color:${crit?'#ffe135':'#ffffff'};
+    text-shadow:${crit?'0 0 8px #ff9600,0 0 20px #ff6a00,0 0 4px #000':'0 0 4px rgba(0,0,0,.8)'};
     font-family:Arial Black,sans-serif;
     transition:all .9s cubic-bezier(.2,.8,.3,1);
     opacity:1;transform:translateY(0) scale(1);
-    text-stroke:${crit?'2px #800':'0'};
-    -webkit-text-stroke:${crit?'2px #800':'0'};
+    text-stroke:${crit?'1.5px #a00':'0'};
+    -webkit-text-stroke:${crit?'1.5px #a00':'0'};
   `;
   d.textContent=(crit?'暴击! ':'')+Math.round(val);
   dmgLayer.appendChild(d);
@@ -7473,16 +7555,25 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
       panel.style.display='block';
     }
   });
-  // 手机底部"能力"按钮
+  // 手机底部"能力"按钮（提升z-index避免被触屏层遮挡）
   const abilBtn = document.getElementById('abilMobileBtn');
   if(abilBtn){
-    abilBtn.addEventListener('click', ()=>{
+    abilBtn.style.zIndex = '30';
+    abilBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
       const panel = document.getElementById('abilityPanel');
       if(!panel) return;
       if(panel.style.display==='block') panel.style.display='none';
       else { renderAbilityPanel(); panel.style.display='block'; }
     });
-    abilBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); }, {passive:false});
+    abilBtn.addEventListener('touchend', (e)=>{ 
+      e.preventDefault();
+      e.stopPropagation();
+      const panel = document.getElementById('abilityPanel');
+      if(!panel) return;
+      if(panel.style.display==='block') panel.style.display='none';
+      else { renderAbilityPanel(); panel.style.display='block'; }
+    }, {passive:false});
   }
   // 能力面板关闭按钮
   const abilPClose = document.getElementById('abilPanelClose');
@@ -8323,3 +8414,4 @@ function loop(){
   requestAnimationFrame(loop);
 }
 loop();
+
