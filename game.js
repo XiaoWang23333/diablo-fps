@@ -1067,12 +1067,6 @@ const player={
   shield:0,shieldMax:0,shieldT:0,hasteT:0,dmgReduce:0,
   equip:{weapon:null,helm:null,armor:null,ring:null},
   inv:[],skills:[],activeSkill:0,
-  // 大招系统
-  ultEnergy:0,        // 当前能量 0-100
-  ultEnergyMax:100,    // 能量上限
-  ultReady:false,       // 是否就绪可释放
-  ultCooldown:0,      // 冷却时间（秒）
-  ultCooldownMax:30,   // 冷却时间上限
 };
 
 const keys={};
@@ -3734,6 +3728,8 @@ function updateHpBar(e){
 }
 
 let waveLevel=1;
+// 波次安全值：防止意外重置（正常游戏过程中 waveLevel 只增不减）
+let _maxReachedWave = 1;
 // 难度等级（每次"提升难度重玩"+1；敌人 HP/伤害额外 ×(1 + (difficulty-1)*0.5)）
 let difficulty = 1;
 // 最终 BOSS 出现波次
@@ -3984,6 +3980,8 @@ function spawnWave(){
   // 终波（最终 BOSS 战）不再自增波次，让进度停在第 FINAL_BOSS_WAVE 波直到 BOSS 被击败，
   // 给玩家清晰的"最终决战 / 通关"节点，避免波次无限往上飘没有结束感。
   if(!isFinalWave) waveLevel++;
+  // 追踪最大波次
+  if(waveLevel > _maxReachedWave) _maxReachedWave = waveLevel;
   // 自动存档：每波开始作为存档点（首帧 init 时 _autosaveEnabled=false，不覆盖旧档）
   if(_autosaveEnabled) saveGame(true);
   // 开始统计本波数据（用当前的 waveLevel-1，即刚刷的这波）
@@ -4067,7 +4065,11 @@ function resetLevel(){
   for(const a of aoes){ if(a.mesh) scene.remove(a.mesh); }
   aoes.length = 0;
   // 重置波次和暴怒计时器
+  if(_maxReachedWave > 1){
+    console.warn(`[resetLevel] 波次从 ${waveLevel} 重置到 1（已到达最高波次: ${_maxReachedWave}）`);
+  }
   waveLevel = 1;
+  _maxReachedWave = 1;  // 重玩时也重置追踪
   _victoryDone = false;
   _finalBossSpawned = false;
   _continueAfterVictory = false;
@@ -4109,7 +4111,7 @@ function saveGame(silent){
         equip:player.equip, inv:player.inv,
         skills:skillsData  // 保存技能信息
       },
-      waveLevel, difficulty,
+      waveLevel, maxReachedWave:_maxReachedWave, difficulty,
       victoryDone:_victoryDone, clearCount:_clearCount, continueAfterVictory:_continueAfterVictory,
       quests:{
         completed:[...Quests.completed],
@@ -4164,6 +4166,7 @@ function loadGame(){
   player.inv=(P.inv||[]).map(_relinkItem);
   // 波次 / 难度 / 胜利状态
   waveLevel = data.waveLevel||1;
+  _maxReachedWave = data.maxReachedWave || waveLevel;  // 恢复最大波次追踪
   difficulty = data.difficulty||1;
   _victoryDone = !!data.victoryDone;
   _finalBossSpawned = false;   // 读档后由末尾 spawnWave 决定是否重刷最终 BOSS
@@ -4758,14 +4761,17 @@ function _doOneLevelUp(){
 
 // 关闭能力面板后，检查是否还能继续升级（经验溢出时连续升级）
 const _origHideAbilitySelectPanel = hideAbilitySelectPanel;
+let _abilCloseCooldown = 0;  // 防重复弹窗：关闭后短暂冷却
 hideAbilitySelectPanel = function(){
   _origHideAbilitySelectPanel();
+  _abilCloseCooldown = 300;  // 300ms 冷却期，防止连续快速弹窗
   // 延迟一帧再检查，避免面板还没完全关闭就又打开
-  requestAnimationFrame(()=>{
+  setTimeout(()=>{  // 改用 setTimeout(>300ms) 替代 requestAnimationFrame，确保冷却通过
+    _abilCloseCooldown = 0;  // 冷却结束
     if(player.exp>=player.expNeed && !_abilitySelectOpen){
       _doOneLevelUp();
     }
-  });
+  }, 350);
 };
 function heal(v){player.hp=Math.min(player.hpMax,player.hp+v);}
 function damagePlayer(v, source){
@@ -5542,8 +5548,9 @@ function showTip(it,x,y){
   // 流派标签点击事件：显示精通效果（确保可交互）
   bindClassTagTips(tipEl);
 
-  // 对比面板中的流派标签也需要绑定
-  if(cur && cur!==it){
+    // 对比面板中的流派标签也需要绑定
+  const _cmpEq = (it && it.slot) ? player.equip[it.slot] : null;
+  if(_cmpEq && _cmpEq!==it){
     setTimeout(()=>{
       bindClassTagTips(tipCmpEl);
     }, 0);
@@ -5799,6 +5806,10 @@ function toggleInv(byPad){
       return;
     }
 
+    // 关闭背包时恢复已选能力按钮的显示
+    const _abBtn2 = document.getElementById('btnInvAbility');
+    if(_abBtn2) _abBtn2.style.display = '';
+
     gamePaused=false;
     // 触屏模式：不请求 PointerLock，直接走 fallback 标记为已锁定
     if(InputMode && InputMode.current==='touch'){
@@ -5814,6 +5825,9 @@ function toggleInv(byPad){
     gamePaused=true;
     _hoverIdx=-1;
     hideTip();
+    // 背包打开时隐藏右下角的"已选能力"按钮
+    const _abBtn = document.getElementById('btnInvAbility');
+    if(_abBtn) _abBtn.style.display = 'none';
     // 用手柄打开则隐藏鼠标 + 屏蔽鼠标 hover
     if(byPad || gp.connected) document.body.classList.add('pad-inv-open');
     else document.body.classList.remove('pad-inv-open');
@@ -7356,8 +7370,9 @@ function spawnStatChangeFloats(before, after){
 }
 const lootWrap=document.getElementById('loot');
 function addLootText(it){
-  // 仅在玩家"拾取"时显示飘字（dropLoot 中已去掉调用，掉落不再飘字）
-  if(!it || !it.quality) return;
+  // 已关闭：不再显示拾取飘字，避免遮挡屏幕中央视野
+  return;
+}
   const d=document.createElement('div');d.className='loot-item';
   d.style.borderLeftColor=it.quality.color;
   d.innerHTML=`<span style="color:${it.quality.color}">${it.name}</span> <span style="color:#888;font-size:11px">[${it.quality.name||''}]</span>`;
@@ -7649,19 +7664,6 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
   const bs = document.getElementById('btnSort');
   if(bs) bs.addEventListener('click', sortInv);
 }
-// 大招按钮绑定
-{
-  const ub = document.getElementById('ultimateBtn');
-  if(ub) ub.addEventListener('click', castUlt);
-}
-// 键盘快捷键：Ctrl 键释放大招
-document.addEventListener('keydown', e=>{
-  if(e.code==='ControlLeft' || e.code==='ControlRight'){
-    if(!gamePaused && controls.isLocked && player.hp>0){
-      castUlt();
-    }
-  }
-});
 // 背包分类 Tab 绑定（默认 'all' 已在 setInvCategory 体现）
 {
   document.querySelectorAll('#invTabBar .invTab').forEach(btn=>{
@@ -8409,22 +8411,6 @@ function update(dt){
   // 回血回蓝
   if(player.hp>0&&player.hp<player.hpMax)player.hp=Math.min(player.hpMax,player.hp+player.hpRegen*dt);
   if(player.mp<player.mpMax)player.mp=Math.min(player.mpMax,player.mp+player.mpRegen*dt);
-  // 大招充能（战斗中持续充能）
-  if(!player._dead && enemies.length>0){
-    player.ultEnergy = Math.min(player.ultEnergyMax, player.ultEnergy + 2.5*dt); // 约40秒充满
-  }
-  // 大招就绪判定
-  player.ultReady = (player.ultEnergy >= player.ultEnergyMax);
-  // 大招冷却
-  if(player.ultCooldown>0){
-    player.ultCooldown -= dt;
-    if(player.ultCooldown<=0){
-      player.ultCooldown = 0;
-      player.ultEnergy = 0; // 冷却结束，重新开始充能
-    }
-  }
-  // 更新大招UI
-  updateUltUI();
   // 防御性状态计时衰减
   if((player.shieldT||0)>0){
     player.shieldT-=dt;
@@ -8436,122 +8422,6 @@ function update(dt){
   }
   refreshInfo();
   drawMinimap();
-}
-
-// ==================== 大招系统 ====================
-function updateUltUI(){
-  const btn = document.getElementById('ultimateBtn');
-  const energy = document.getElementById('ultEnergy');
-  if(!btn || !energy) return;
-  const pct = player.ultEnergy / player.ultEnergyMax * 100;
-  energy.style.height = pct + '%';
-  if(player.ultReady && player.ultCooldown===0){
-    btn.classList.add('ready');
-    btn.title = '大招就绪！点击释放（或按Ctrl键）';
-  } else {
-    btn.classList.remove('ready');
-    if(player.ultCooldown>0){
-      btn.title = `大招冷却中…${Math.ceil(player.ultCooldown)}秒`;
-    } else {
-      btn.title = `大招充能中…${Math.floor(pct)}%`;
-    }
-  }
-}
-
-// 释放大招
-function castUlt(){
-  if(!player.ultReady || player.ultCooldown>0 || player.hp<=0) return;
-  if(gamePaused || !controls.isLocked) return;
-  player.ultReady = false;
-  player.ultCooldown = player.ultCooldownMax;
-  // 大招效果：对周围所有敌人造成大量伤害
-  const ULT_RANGE = 25;      // 大招范围
-  const ULT_DMG_BASE = 500;  // 基础伤害
-  const totalDmg = ULT_DMG_BASE + player.level * 80 + ((player._strTotal||0) + (player._intTotal||0)) * 3;
-  let hitCount = 0;
-  enemies.forEach(e=>{
-    if(e.hp<=0) return;
-    const dist = e.mesh.position.distanceTo(controls.getObject().position);
-    if(dist <= ULT_RANGE){
-      var mult = 1;
-      if(e.isElite) mult += 0.5;
-      if(e.isBoss) mult += 0.3;
-      damageEnemy(e, {dmg:Math.round(totalDmg * mult), crit:true}, true);
-      hitCount++;
-    }
-  });
-  // 大招动画效果
-  spawnUltAnimation();
-  // 提示
-  toast(`⚡ 大招释放！造成 ${Math.round(totalDmg)} 伤害，命中 ${hitCount} 个敌人`);
-  Audio.cast_aoe && Audio.cast_aoe();
-}
-
-// 大招动画
-function spawnUltAnimation(){
-  const pos = controls.getObject().position.clone();
-  pos.y = 0.1;
-  // 金色冲击波环
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.1, 25, 64),
-    new THREE.MeshBasicMaterial({color:0xffd700, transparent:true, opacity:0.9, side:THREE.DoubleSide})
-  );
-  ring.rotation.x = -Math.PI/2;
-  ring.position.copy(pos);
-  scene.add(ring);
-  // 动画：扩大+淡出
-  const startTime = performance.now();
-  function animRing(){
-    const t = (performance.now() - startTime) / 1000; // 秒
-    if(t > 1.2) { scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); return; }
-    const s = 1 + t * 20; // 扩大到25米
-    ring.scale.set(s, s, s);
-    ring.material.opacity = 0.9 * (1 - t/1.2);
-    requestAnimationFrame(animRing);
-  }
-  animRing();
-  // 中心闪光
-  const flash = new THREE.Mesh(
-    new THREE.CircleGeometry(3, 32),
-    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:1, side:THREE.DoubleSide})
-  );
-  flash.rotation.x = -Math.PI/2;
-  flash.position.copy(pos);
-  flash.position.y = 0.15;
-  scene.add(flash);
-  const flashStart = performance.now();
-  function animFlash(){
-    const t = (performance.now() - flashStart) / 1000;
-    if(t > 0.5) { scene.remove(flash); flash.geometry.dispose(); flash.material.dispose(); return; }
-    flash.material.opacity = 1 - t/0.5;
-    flash.scale.set(1+t*3, 1+t*3, 1+t*3);
-    requestAnimationFrame(animFlash);
-  }
-  animFlash();
-  // 粒子效果（简易版）
-  for(let i=0; i<30; i++){
-    const p = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 4, 4),
-      new THREE.MeshBasicMaterial({color:Math.random()>0.5?0xffd700:0xffffff, transparent:true, opacity:0.9})
-    );
-    p.position.copy(pos);
-    p.position.y += Math.random()*2;
-    const angle = Math.random()*Math.PI*2;
-    const speed = 8 + Math.random()*12;
-    const vx = Math.cos(angle)*speed, vz = Math.sin(angle)*speed;
-    scene.add(p);
-    const pStart = performance.now();
-    function animP(){
-      const t = (performance.now() - pStart) / 1000;
-      if(t > 1.0) { scene.remove(p); p.geometry.dispose(); p.material.dispose(); return; }
-      p.position.x += vx * 0.016;
-      p.position.z += vz * 0.016;
-      p.position.y -= 0.03;
-      p.material.opacity = 0.9 * (1 - t/1.0);
-      requestAnimationFrame(animP);
-    }
-    animP();
-  }
 }
 
 // ===================== 自适应画质（PerfMon）=====================
