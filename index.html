@@ -111,7 +111,7 @@
   #abilityPanel .abilRow{padding:8px 12px;margin:4px 10px;border-radius:5px;background:rgba(255,255,255,.04);border:1px solid transparent}
   #abilityPanel .abilRow:hover{background:rgba(90,166,255,.08);border-color:rgba(90,166,255,.3)}
   #lootToast{transition:all .35s cubic-bezier(.2,.8,.3,1)}
-  body.mode-touch #abilMobileBtn{display:block!important}
+  body.mode-touch #btnInvAbility{display:none!important}
   /* 伤害数字 */
   #dmgNumbers div{will-change:transform,opacity}
   #overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;color:#ddd;text-align:center;cursor:pointer;
@@ -560,22 +560,16 @@
     border:2px solid #5aa6ff;border-radius:6px;color:#5aa6ff;
     font-size:13px;font-weight:bold;cursor:pointer">✕ 关闭</button>
 </div>
+
 <!-- 桌面端右下角常驻"已选能力"按钮（技能栏上方） -->
 <button id="btnInvAbility" style="
-  display:block;position:fixed;right:20px;bottom:140px;z-index:26;
+  display:none;position:fixed;right:20px;bottom:140px;z-index:26;
   padding:8px 16px;border:2px solid #5aa6ff;border-radius:6px;
   background:rgba(15,12,8,.9);color:#5aa6ff;font-size:13px;font-weight:bold;
   cursor:pointer;letter-spacing:1px;
   box-shadow:0 0 10px rgba(90,166,255,.3);
   ">📊 已选能力</button>
 
-<!-- 手机底部常驻"能力"按钮（右下角） -->
-<button id="abilMobileBtn" style="
-  display:none;position:fixed;bottom:100px;right:8px;z-index:25;
-  width:52px;height:52px;border-radius:50%;border:2px solid #5aa6ff;
-  background:rgba(15,12,8,.9);color:#5aa6ff;font-size:18px;cursor:pointer;
-  box-shadow:0 0 10px rgba(90,166,255,.4);
-  ">📊</button>
 
 <!-- 伤害数字层（建议5：视觉反馈） -->
 <div id="dmgNumbers" style="position:fixed;inset:0;z-index:18;pointer-events:none;overflow:hidden"></div>
@@ -724,32 +718,18 @@
     <button id="tInv"   class="tBtn tInvBig">🎒<span class="lbl">背包</span></button>
     <button id="tAuto"  class="tBtn">🤖<span class="lbl">托管</span></button>
     <button id="tJump"  class="tBtn">🏃<span class="lbl">奔跑</span></button>
+    <button id="tAbil"  class="tBtn">📊<span class="lbl">能力</span></button>
   </div>
 </div>
 
 <div id="overlay">
   <h1>DIABLO · FPS · AUTO</h1>
-  <div id="modeSelect" style="display:flex;gap:10px;justify-content:center;margin:10px 0 14px;flex-wrap:wrap">
-    <div class="modeCard" data-mode="kbm"><div class="mIco">🖥</div><div class="mName">PC 键鼠</div><div class="mTip">WASD + 鼠标</div></div>
-    <div class="modeCard" data-mode="touch"><div class="mIco">📱</div><div class="mName">手机竖屏</div><div class="mTip">虚拟摇杆 + 触屏</div></div>
-  </div>
-  <p id="modeHint" style="color:#aaa;font-size:12px;margin-bottom:6px">请先选择操作模式（已自动检测推荐）</p>
-
-  <!-- 三段操作说明：仅显示当前模式对应的一段 -->
+  <!-- 操作模式说明 -->
   <div id="modeHelp">
-    <div class="modeHelpBlock" data-mode="kbm">
-      <p>第一人称视角 · <b>自动战斗</b> ARPG 原型<br/>
-      <span class="key">WASD</span> 移动　<span class="key">Shift</span> 跑步开关　<span class="key">空格</span> 跳　<span class="key">T</span> 托管　<span class="key">M</span> 静音<br/>
-      <span class="key">F</span> 拾取　<span class="key">I</span> 背包　<span class="key">Q</span> 喝🧪生命药水　<span class="key">E</span> 喝🧴法力药水　<span class="key">1-8</span> 切技能<br/>
-      <span class="key">鼠标左键</span> 释放技能　<span class="key">ESC</span> 暂停 / 释放鼠标</p>
-    </div>
     <div class="modeHelpBlock" data-mode="touch">
-      <p><span style="color:#5aa6ff">📱 手机竖屏</span><br/>
-      左下 <b>虚拟摇杆</b> 移动　右上半屏 <b>滑动</b> 转视角<br/>
-      右下 <b>大圆「攻击」</b> 释放当前技能<br/>
-      中下功能键：<b>跳 / 背包 / 托管 / 暂停</b><br/>
-      <b>🧪血</b> · <b>🧴蓝</b> 直接喝药　走过自动拾取<br/>
-      技能槽 <b>tap</b> 切换并施放　<b>长按</b> 看技能描述</p>
+      <p><span style="color:#5aa6ff">📱 手机竖屏 · 触屏操控</span><br/>
+      左摇杆移动　右摇杆视角<br/>
+      底部功能键：<b>暂停 / 任务 / 🎒背包 / 托管 / 奔跑 / 能力</b></p>
     </div>
   </div>
 
@@ -8526,38 +8506,24 @@ document.getElementById('btnFuse'  ).addEventListener('click', tryFuse);
       panel.style.display='block';
     }
   });
-  // 手机底部"能力"按钮（调整位置避免与右摇杆重叠）
-  const abilBtn = document.getElementById('abilMobileBtn');
-  if(abilBtn){
-    abilBtn.style.zIndex = '30';
-    abilBtn.style.bottom = '100px';  // 提高按钮位置，避免与右摇杆重叠
-    abilBtn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const panel = document.getElementById('abilityPanel');
-      if(!panel) return;
-      if(panel.style.display==='block') {
-        panel.style.display='none';
-        gamePaused = false;  // 关闭时恢复游戏
-      } else { 
-        renderAbilityPanel(); 
-        panel.style.display='block'; 
-        gamePaused = true;   // 打开时暂停游戏
-      }
-    });
-    abilBtn.addEventListener('touchend', (e)=>{ 
-      e.preventDefault();
-      e.stopPropagation();
+  // 底部功能栏"能力"按钮（#tAbil）
+  const tAbil = document.getElementById('tAbil');
+  if(tAbil){
+    const togglePanel = (e)=>{
+      if(e) e.stopPropagation();
       const panel = document.getElementById('abilityPanel');
       if(!panel) return;
       if(panel.style.display==='block') {
         panel.style.display='none';
         gamePaused = false;
-      } else { 
-        renderAbilityPanel(); 
-        panel.style.display='block'; 
+      } else {
+        renderAbilityPanel();
+        panel.style.display='block';
         gamePaused = true;
       }
-    }, {passive:false});
+    };
+    tAbil.addEventListener('click', togglePanel);
+    tAbil.addEventListener('touchend', (e)=>{ e.preventDefault(); togglePanel(e); }, {passive:false});
   }
   // 能力面板关闭按钮（关闭时取消暂停）
   const abilPClose = document.getElementById('abilPanelClose');
