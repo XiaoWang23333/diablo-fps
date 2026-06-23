@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="mobile-web-app-capable" content="yes" />
-<title>Diablo FPS·Auto — 第一人称自动战斗 ARPG 原型</title>
+<title>第一人称 · 暗黑破坏神</title>
 <style>
   :root{--gold:#e8c45a;--blue:#5aa6ff;--yellow:#f4e26b;--green:#7bd96a;--orange:#ff9a3c;--red:#ff5050;
        --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
@@ -61,7 +61,7 @@
   .tgl{background:rgba(0,0,0,.6);color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:1px}
   .tgl:hover{border-color:var(--gold);color:#fff}
   .tgl.on{background:rgba(122,217,106,0.18);border-color:#7bd96a;color:#bff7ad}
-  .tgl.canFuse{background:rgba(232,196,90,0.18);border-color:var(--gold);color:var(--gold);animation:fuseGlow 1.2s ease-in-out infinite;box-shadow:0 0 12px rgba(232,196,90,.5)}
+  .tgl.canFuse{background:rgba(123,217,106,0.18);border-color:#7bd96a;color:#7bd96a;animation:fuseGlow 1.2s ease-in-out infinite;box-shadow:0 0 12px rgba(123,217,106,.5)}
   @keyframes fuseGlow{0%,100%{box-shadow:0 0 12px rgba(232,196,90,.5)}50%{box-shadow:0 0 24px rgba(232,196,90,.9)}}
   #toast{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:7;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px}
   .toast-item{background:rgba(0,0,0,.55);padding:4px 10px;border-radius:3px;font-size:13px;border:1px solid #333;animation:fadeUp 2s forwards}
@@ -723,7 +723,7 @@
 </div>
 
 <div id="overlay">
-  <h1>DIABLO · FPS · AUTO</h1>
+  <h1>第一人称 · 暗黑破坏神</h1>
   <!-- 操作模式说明 -->
   <div id="modeHelp">
     <div class="modeHelpBlock" data-mode="touch">
@@ -1836,7 +1836,8 @@ const player={
 const keys={};
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
-  if(e.code==='KeyI')toggleInv();
+  // 升级面板打开时，禁用背包操作
+  if(e.code==='KeyI' && !_abilitySelectOpen)toggleInv();
   if(e.code==='KeyF')tryPickup();
   // R = 背包打开时整理
   if(e.code==='KeyR' && invPanel && invPanel.style.display==='block'){ sortInv(); }
@@ -3230,6 +3231,7 @@ function makeHpPotion(tier){
   if(tier<0)tier=0; if(tier>1)tier=1;
   return {
     special: 'hpPotion',
+    isPotion: true,
     tier,
     name: tier>0 ? '高级生命药水' : '生命药水',
     icon: '🧪',
@@ -3242,6 +3244,7 @@ function makeMpPotion(tier){
   if(tier<0)tier=0; if(tier>1)tier=1;
   return {
     special: 'mpPotion',
+    isPotion: true,
     tier,
     name: tier>0 ? '高级法力药水' : '法力药水',
     icon: '🧴',
@@ -3743,33 +3746,49 @@ const enemies=[];
 // role: melee 近战 / ranged 远程 / hybrid 远近兼有
 // atk: 攻击间隔(s)；rng: 攻击距离(m)；prefRng: 远程怪的"理想保持距离"
 const ENEMY_TYPES={
-  zombie:  {color:0x88b04d, hp:30, dmg:[4,7],   spd:3.0, exp:8,  name:'腐尸',   role:'melee',  atk:1.6, rng:1.8},
-  skeleton:{color:0xfff5dc, hp:24, dmg:[6,10],  spd:3.4, exp:12, name:'骷髅射手', role:'ranged', atk:2.0, rng:18, prefRng:12, projColor:0xeaeaea, projType:'arrow'},
-  ghoul:   {color:0xb84a30, hp:48, dmg:[7,12],  spd:4.0, exp:18, name:'食尸鬼', role:'melee',  atk:1.0, rng:2.0},
-  imp:     {color:0xff5028, hp:22, dmg:[5,9],   spd:4.2, exp:14, name:'小恶魔', role:'ranged', atk:1.3, rng:14, prefRng:9,  projColor:0xff6020, projType:'fireball'},
-  knight:  {color:0x4a3a8a, hp:90, dmg:[14,22], spd:3.0, exp:30, name:'死亡骑士', role:'melee',  atk:2.2, rng:2.4},
+  // 敌人难度调整：降低基础伤害和每波增长率，让游戏更轻松
+  zombie:  {color:0x88b04d, hp:35, dmg:[3,6],   spd:2.8, exp:10, name:'腐尸',   role:'melee',  atk:1.8, rng:1.8},
+  skeleton:{color:0xfff5dc, hp:28, dmg:[5,8],   spd:3.2, exp:14, name:'骷髅射手', role:'ranged', atk:2.2, rng:18, prefRng:12, projColor:0xeaeaea, projType:'arrow'},
+  ghoul:   {color:0xb84a30, hp:42, dmg:[6,10],  spd:3.8, exp:20, name:'食尸鬼', role:'melee',  atk:1.2, rng:2.0},
+  imp:     {color:0xff5028, hp:25, dmg:[4,7],   spd:4.0, exp:16, name:'小恶魔', role:'ranged', atk:1.5, rng:14, prefRng:9,  projColor:0xff6020, projType:'fireball'},
+  knight:  {color:0x4a3a8a, hp:100, dmg:[12,18], spd:2.8, exp:35, name:'死亡骑士', role:'melee',  atk:2.4, rng:2.4},
   // 中期 BOSS：冰霜领主（每 5 波之一，与死亡骑士交替）
-  frostlord:{color:0x6abfff, hp:120, dmg:[16,26], spd:2.6, exp:50, name:'冰霜领主', role:'melee', atk:2.0, rng:2.6},
+  frostlord:{color:0x6abfff, hp:130, dmg:[14,22], spd:2.4, exp:55, name:'冰霜领主', role:'melee', atk:2.2, rng:2.6},
   // 最终 BOSS：远古霸主（用 knight 模型 + 巨大化 + 暗红光）
-  overlord:{color:0x8a0e0e, hp:180, dmg:[28,42], spd:2.6, exp:200, name:'远古霸主', role:'melee', atk:1.8, rng:3.2},
+  overlord:{color:0x8a0e0e, hp:200, dmg:[24,36], spd:2.4, exp:220, name:'远古霸主', role:'melee', atk:2.0, rng:3.2},
 };
 // 散兵/怪群只会用普通敌人；BOSS 类型 (knight/frostlord/overlord) 仅在波次/最终战时单独 spawn
 const TYPE_KEYS = Object.keys(ENEMY_TYPES).filter(k=>k!=='knight' && k!=='frostlord' && k!=='overlord');
 
-// 加权随机选敌人类型：远程类（skeleton/imp）权重低，避免成群远程刷屏
+// 加权随机选敌人类型：根据波次解锁，远程类（skeleton/imp）权重低
 function pickEnemyType(){
-  // 近战 zombie/ghoul 权重 4；远程 skeleton/imp 权重 1
+  // 根据当前波次决定可用敌人类型
+  // 安全修复：确保 waveLevel 有效，防止意外为0时解锁过多怪物
+  const wl = Math.max(1, (waveLevel|0) || 1);
+  // 硬性保护：wl<=1时直接返回zombie，确保第一波绝不会刷其他怪物
+  if(wl <= 1) return 'zombie';
+  const available = ['zombie']; // 第1波只有丧尸
+  if(wl >= 2) available.push('skeleton'); // 第2波解锁骷髅射手
+  if(wl >= 3) available.push('ghoul');     // 第3波解锁食尸鬼
+  if(wl >= 4) available.push('imp');       // 第4波解锁小恶魔
+  
+  // 加权随机：近战权重高，远程权重低；只从 available 里取权重，防止第一波误用其他键
   const weights = {
     zombie: 4, ghoul: 4,
     skeleton: 1, imp: 1,
   };
-  const total = TYPE_KEYS.reduce((s,k)=>s+(weights[k]||1), 0);
+  // 只保留 available 里有的键，防止第一波误用 ghoul/imp 的权重
+  const validWeights = {};
+  available.forEach(k => { validWeights[k] = weights[k] || 1; });
+  
+  // 只从可用类型中选择（使用 validWeights 确保只选取当前波次可用的怪物类型）
+  const total = available.reduce((s,k)=>s+(validWeights[k]||1), 0);
   let r = Math.random()*total;
-  for(const k of TYPE_KEYS){
-    r -= (weights[k]||1);
+  for(const k of available){
+    r -= (validWeights[k]||1);
     if(r<=0) return k;
   }
-  return TYPE_KEYS[0];
+  return available[0];
 }
 
 // 敌人投射物（敌→我）
@@ -4430,9 +4449,9 @@ function spawnEnemy(type,level,pos,isElite=false,isBoss=false){
   const def=ENEMY_TYPES[type];
   const mesh=makeEnemyMesh(type);
   mesh.position.copy(pos);scene.add(mesh);
-  // 数值成长曲线：前5波线性慢增长，5波后指数加快，避免前期压力过大
-  const hpScale  = 1 + level*0.20 + Math.max(0,level-5)*level*0.018;
-  const dmgScale = 1 + level*0.10 + Math.max(0,level-5)*level*0.006;
+  // 数值成长曲线：2级后开始提升，5波后进一步提高
+  const hpScale  = 1 + level*0.25 + Math.max(0,level-2)*level*0.025;
+  const dmgScale = 1 + level*0.15 + Math.max(0,level-2)*level*0.010;
   // 难度加成：每提升 1 难度，HP/伤害额外 ×(1 + (difficulty-1)*0.6)
   const diffMul = 1 + (difficulty-1)*0.6;
   const hpMax=Math.floor(def.hp * hpScale * diffMul * (isElite?2.5:1) * (isBoss?12:1));
@@ -4761,7 +4780,9 @@ function renderProgress(){
   const cEl    = document.getElementById('pCleared');
   if(!fill || !marks || !wEl || !dEl || !cEl) return;
   // waveLevel 在 spawnWave 末尾会 ++，所以"刚刷完的当前波"= waveLevel-1
-  let cur = Math.min(FINAL_BOSS_WAVE, Math.max(0, waveLevel-1));
+  // 安全修复：防止 waveLevel 未定义或异常时为0导致显示第0波
+  const wlSafe = waveLevel || 1;
+  let cur = Math.min(FINAL_BOSS_WAVE, Math.max(1, wlSafe-1)); // 最小显示第1波
   // 终波（最终 BOSS 战）不再自增 waveLevel，需特判：BOSS 已刷出即视为已抵达第 FINAL_BOSS_WAVE 波
   if(waveLevel===FINAL_BOSS_WAVE && _finalBossSpawned) cur = FINAL_BOSS_WAVE;
   const pct = (cur / FINAL_BOSS_WAVE) * 100;
@@ -5306,22 +5327,24 @@ function updateChests(dt){
 }
 
 function dropLoot(pos,level,isElite,isBoss){
-  // 提高掉落率（v0.24）- 让后期也能拿到更好的装备
-  // 普通怪 25% 掉 1 件；精英 70% 掉 1 件 + 30% 第 2 件；BOSS 固定 4 件
+  // 掉落概率 - 大幅降低掉落率，让游戏节奏更慢
+  // 普通怪 3% 掉 1 件；精英 12% 掉 1 件 + 5% 第 2 件；BOSS 固定 1 件
   let count = 0;
   if(isBoss){
-    count = 4;  // 提高BOSS掉落数量
+    count = 1; // BOSS只掉1件
   } else if(isElite){
-    if(Math.random() < 0.70) count = 1;
-    if(count===1 && Math.random() < 0.30) count = 2;
+    if(Math.random() < 0.12) count = 1;
+    if(count===1 && Math.random() < 0.05) count = 2;
   } else {
-    if(Math.random() < 0.25) count = 1;   // 提高普通怪掉落率
+    if(Math.random() < 0.03) count = 1;
   }
   for(let i=0;i<count;i++){
     const it=genItem(level);
     spawnLootFromItem(it, pos, true);
-    // 装备掉落提示（建议2）
-    showLootToast(it);
+    // 装备掉落提示（仅装备显示，药水/宝石等不显示）
+    if(!it.isGem && !it.special && !it.isPotion){
+      showLootToast(it);
+    }
   }
   // ===== 宝石掉落 =====
   // 普通 4%、精英 16%、BOSS 必掉 1 颗（v0.23.3 提高宝石掉率）
@@ -5502,7 +5525,15 @@ function gainExp(v){
   v = v * (1 + expBonus/100);
   player.exp+=Math.floor(v);
   // 非阻塞升级：一次只升一级，弹出能力选择面板
-  if(player.exp>=player.expNeed && !_abilitySelectOpen){
+  // 修复：背包/合成/镶嵌/能力面板打开时不弹能力选择（防止操作时弹出能力面板）
+  const invOpen = invPanel && invPanel.style.display==='block';
+  const _anyPanelOpen = invOpen
+    || (typeof fusePanelEl!=='undefined' && fusePanelEl && fusePanelEl.style.display==='flex')
+    || (typeof gemUsePanel!=='undefined' && gemUsePanel && gemUsePanel.style.display==='flex')
+    || (typeof socketPanel!=='undefined' && socketPanel && socketPanel.style.display==='flex')
+    || _abilitySelectOpen
+    || gamePaused;
+  if(player.exp>=player.expNeed && !_anyPanelOpen){
     _doOneLevelUp();
   }
   refreshInfo();
@@ -5512,8 +5543,12 @@ function gainExp(v){
 function _doOneLevelUp(){
   if(player.exp<player.expNeed) return;
   player.exp-=player.expNeed; player.level++;
-  player.expNeed=Math.floor(50*Math.pow(1.25,player.level-1));
-  player.str+=2; player.dex+=2; player.int+=2;
+  // 经验公式调整——2级后大幅提高所需经验，大幅降低升级速度
+  if(player.level <= 2)
+    player.expNeed = Math.floor(50 * Math.pow(1.25, player.level-1));
+  else
+    player.expNeed = Math.floor(180 * Math.pow(1.65, player.level-2)); // 再次提高基数和指数，让升级更慢
+  player.str+=1; player.dex+=1; player.int+=1;
   // 每升1级增加1格背包上限
   INV_CAP += 1;
   applyEquipStats();
@@ -6107,10 +6142,12 @@ window.showClassMastery = function(tagEl){
 // 部位中文名
 const SLOT_CN = {weapon:'武器',helm:'头盔',armor:'护甲',ring:'戒指'};
 
-function itemTipHtml(it, title){
+function itemTipHtml(it, title, isCurrentEquipped){
   let html='';
   if(title) html+=`<div style="color:#888;font-size:11px;margin-bottom:2px">${title}</div>`;
-  html+=`<div style="color:${it.quality.color};font-weight:bold">${it.name}</div>`;
+  // 当前装备中时，名字后面加"（装备中）"
+  const nameSuffix = (isCurrentEquipped || (it.slot && player.equip[it.slot] === it)) ? ' <span style="color:#7bd96a;font-size:11px">（装备中）</span>' : '';
+  html+=`<div style="color:${it.quality.color};font-weight:bold">${it.name}${nameSuffix}</div>`;
   // 宝石的 tip：单独样式
   if(it.isGem){
     html+=`<div style="color:#888">宝石 · ${GEM_GRADES[it.grade].name}级</div>`;
@@ -6151,7 +6188,21 @@ function itemTipHtml(it, title){
   // 流派标签：醒目色彩条，点击查看精通效果
   if(it.classTag && CLASS_DB[it.classTag]){
     const cls = CLASS_DB[it.classTag];
-    html+=`<div class="classTagTip" data-ctag="${it.classTag}" onclick="window.showClassMastery(this)" style="display:inline-block;margin:3px 0;padding:2px 8px;background:rgba(0,0,0,.4);border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px;cursor:pointer;pointer-events:auto">${cls.icon} ${cls.name}流派</div>`;
+    // 统计当前已装备的同流派数量
+    let classCount = 0;
+    ['weapon','helm','armor','ring'].forEach(s=>{
+      const eq = player.equip[s];
+      if(eq && eq.classTag === it.classTag) classCount++;
+    });
+    const isActivated = classCount >= 4;
+    const statusText = isActivated ? ' ✅ 已激活' : ` (${classCount}/4)`;
+    // 显示流派标签 + 激活状态 + 精通效果摘要
+    let masteryHtml = '';
+    if(isActivated){
+      const mLines = cls.mastery.split('\n');
+      masteryHtml = `<div style="color:${cls.color};font-size:10px;margin-top:2px;padding:3px 6px;background:rgba(0,0,0,.3);border-radius:2px">★ ${mLines[0] || cls.mastery}</div>`;
+    }
+    html+=`<div class="classTagTip" data-ctag="${it.classTag}" onclick="window.showClassMastery(this)" style="display:inline-block;margin:3px 0;padding:2px 8px;background:${isActivated?cls.color.replace(')',',0.15)'):'rgba(0,0,0,.4)'};border:1px solid ${cls.color};border-radius:3px;color:${cls.color};font-size:11px;letter-spacing:1px;cursor:pointer;pointer-events:auto">${cls.icon} ${cls.name}流派${statusText}</div>${masteryHtml}`;
   }
   if(it.dmgMin)html+=`<div>伤害 ${it.dmgMin}-${it.dmgMax}</div>`;
   if(it.armor)html+=`<div>护甲 +${it.armor}</div>`;
@@ -6170,26 +6221,28 @@ function itemTipHtml(it, title){
     }
   }
   if(it.skills)html+=`<div style="color:var(--orange)">技能：${it.skills.map(k=>SKILL_DB[k].name).join('、')}</div>`;
-  // 套装信息块
+  // 套装信息块 - 优化显示效果
   if(it.setKey && SET_DB[it.setKey]){
     const def = SET_DB[it.setKey];
     const have = (player._setCount && player._setCount[it.setKey]) || 0;
     const total = def.pieces.length;
-    html+=`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #444">`;
-    html+=`<div style="color:${def.color};font-weight:bold">${def.name}套装 (${have}/${total})</div>`;
+    const isActive = have >= 2; // 2件套起步激活
+    html+=`<div style="margin-top:8px;padding:8px 10px;border-radius:4px;${isActive?'background:rgba(0,0,0,.4);border:1px solid '+def.color:'border:1px dashed #555'}">`;
+    html+=`<div style="color:${def.color};font-weight:bold;font-size:13px;margin-bottom:4px">📦 ${def.name}套装 (${have}/${total})</div>`;
     // 列出全部部位 + 哪些已穿
-    html+=`<div style="color:#888;font-size:11px;margin:2px 0">部位：`+
+    html+=`<div style="color:#aaa;font-size:11px;margin:2px 0">部位：`+
       def.pieces.map(p=>{
         const wearing = player.equip[p] && player.equip[p].setKey===it.setKey;
-        return `<span style="color:${wearing?def.color:'#666'}">${SLOT_CN[p]}${wearing?'✓':''}</span>`;
-      }).join(' / ')+`</div>`;
+        return `<span style="color:${wearing?def.color:'#555'};font-weight:${wearing?'bold':'normal'}">${SLOT_CN[p]}${wearing?' ✓':''}</span>`;
+      }).join('  /  ')+`</div>`;
     // 列出每档加成，已激活高亮
     Object.keys(def.bonuses).forEach(req=>{
       const r=+req;
       const active = have>=r;
       const color = active ? def.color : '#666';
-      const mark  = active ? '◆' : '◇';
-      html+=`<div style="color:${color};font-size:11px">${mark} ${r}件套：${def.bonuses[req].desc}</div>`;
+      const mark  = active ? '✅' : '⬜';
+      const bgStyle = active ? 'background:rgba(0,0,0,.3);padding:2px 4px;border-radius:2px;margin:2px 0' : '';
+      html+=`<div style="color:${color};font-size:11px;${bgStyle}">${mark} ${r}件套：${def.bonuses[req].desc}</div>`;
     });
     html+=`</div>`;
   }
@@ -6243,20 +6296,24 @@ function itemCompareSummary(it, cur){
     if(newV===0 && curV===0) continue;
     const d = newV - curV;
     if(Math.abs(d) < 0.5 && newV===0) continue;
-    const arrow = d>0.5 ? `<span style="color:#7bd96a">↑+${r.fmt(d)}</span>`
-                : d<-0.5 ? `<span style="color:#ff7070">↓${r.fmt(d)}</span>`
+    const arrow = d>0.5 ? `<span style="color:#7bd96a;font-weight:bold">↑+${r.fmt(d)}</span>`
+                : d<-0.5 ? `<span style="color:#ff7070;font-weight:bold">↓${r.fmt(d)}</span>`
                 : `<span style="color:#888">—</span>`;
-    lines.push(`<div style="display:flex;font-size:12px;line-height:1.55">`+
-               `<b style="color:#ddd;min-width:58px;flex-shrink:0">${r.label}</b>`+
-               `<span><span style="color:#888">${r.fmt(curV)} → </span><b style="color:#fff">${r.fmt(newV)}</b>　${arrow}</span>`+
+    // 优化布局：更清晰的对比显示
+    lines.push(`<div style="display:flex;justify-content:space-between;font-size:12px;line-height:1.6;padding:2px 0">`+
+               `<span style="color:#aaa;min-width:60px;flex-shrink:0">${r.label}</span>`+
+               `<span style="flex:1;text-align:right"><span style="color:#888;text-decoration:line-through;font-size:11px">${r.fmt(curV)}</span> <b style="color:#fff">${r.fmt(newV)}</b> ${arrow}</span>`+
                `</div>`);
     if(lines.length>=6) break;   // 控制最多 6 行
   }
-  // 评分行（核心）
-  const scoreLine = `<div style="display:flex;font-size:13px;line-height:1.55;margin-top:4px;padding-top:4px;border-top:1px solid #3a2f18">`+
-                    `<b style="color:var(--gold);min-width:58px;flex-shrink:0">评分</b>`+
-                    `<span><b style="color:#fff">${sCur}</b><span style="color:#888"> → </span><b style="color:var(--gold)">${sNew}</b></span>`+
-                    `</div>`;
+  // 评分行（核心）- 优化显示效果
+  const scoreDiff = sNew - sCur;
+  const scoreColor = scoreDiff > 0 ? '#7bd96a' : (scoreDiff < 0 ? '#ff7070' : '#888');
+  const scoreArrow = scoreDiff > 0 ? `↑+${scoreDiff}` : (scoreDiff < 0 ? `↓${scoreDiff}` : '—');
+  const scoreLine = `<div style="display:flex;justify-content:space-between;font-size:13px;line-height:1.6;margin-top:6px;padding-top:6px;border-top:2px solid #6b5a2b">`+
+                   `<span style="color:var(--gold);font-weight:bold">📊 评分</span>`+
+                   `<span><span style="color:#888;text-decoration:line-through;font-size:11px">${sCur}</span> <b style="color:var(--gold);font-size:14px">${sNew}</b> <span style="color:${scoreColor};font-weight:bold">${scoreArrow}</span></span>`+
+                   `</div>`;
   if(lines.length===0 && !cur){
     // 新装备且无对比 → 仍显示评分 + 提示
     return `<div class="cmpSummary" style="margin:6px -2px 8px;padding:8px 10px;background:rgba(232,196,90,.08);border:1px solid #6b5a2b;border-radius:5px">`+
@@ -6345,7 +6402,8 @@ function showTip(it,x,y){
     // 对比当前同槽装备：拼到 tipScroll 末尾（格式与上方新装备完全一致）
     const cur = it.slot ? player.equip[it.slot] : null;
     if(cur && cur!==it){
-      if(scrollBox) scrollBox.innerHTML += itemTipHtml(cur);
+      // 两个装备中间空一行隔开
+      if(scrollBox) scrollBox.innerHTML += '<div style="height:12px"></div>' + itemTipHtml(cur, null, true);
     }
     // 触屏模式也需要绑定流派标签点击事件（innerHTML 在此路径才最终确定）
     (function bindClassTagTipTouch(){
@@ -7756,10 +7814,13 @@ function refreshFuseHint(){
   const grp = findFusableGroup();
   if(!grp){
     hint.textContent = '（无可合成组合）';
-    btn.classList.remove('on');
+    btn.classList.remove('on', 'canFuse');
     btn.disabled = true;
     return;
   }
+  // 可以添加合成时，高亮按钮
+  btn.classList.add('canFuse');
+  btn.disabled = false;
   let leftHtml='', rightHtml='';
   if(grp.kind==='unique2bag'){
     leftHtml  = `<span style="color:#e8c45a">${FUSE_N}× 暗金道具</span>`;
@@ -8403,7 +8464,7 @@ setInterval(()=>{
   // 阈值：5 + 波次 × 0.5，但不超过 12（仅作为安全网，正常走结算流程）
   const threshold = Math.min(12, 5 + Math.floor(waveLevel*0.5));
   if(aliveNonBoss < threshold) spawnWave();
-}, 8000);
+}, 1000); // 1秒检查一次，加快波次结算响应速度
 
 // 定时在地图随机点刷宝箱（每 ~22 秒一次，仅游戏进行中）
 setInterval(()=>{
@@ -9006,7 +9067,7 @@ function update(dt){
           // 真正伤害判定
           const cur=e.mesh.position.clone().setY(0);
           if(pp.distanceTo(cur)<6){
-            damagePlayer(rand(e.def.dmg[0],e.def.dmg[1])*1.5*(1+e.level*.2));
+            damagePlayer(rand(e.def.dmg[0],e.def.dmg[1])*1.5*(1+e.level*.12));
           }
           // 视觉
           const aoe=new THREE.Mesh(new THREE.CircleGeometry(6,40),new THREE.MeshBasicMaterial({color:0xff4422,transparent:true,opacity:.55,side:THREE.DoubleSide}));
@@ -9129,7 +9190,7 @@ function update(dt){
         // 射击：在攻击距离内 + CD 到了
         if(dist<=e.def.rng && e.atkCd<=0 && player.hp>0){
           e.atkCd=e.def.atk;
-          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.2);
+          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
           // 给玩家位置带一点提前量
           const aim=pp.clone();
           spawnEnemyProjectile(e.mesh.position,aim,e.def.projType,dmg,e.def.projColor);
@@ -9140,7 +9201,7 @@ function update(dt){
           e.state='attack';
           if(e.atkCd<=0 && player.hp>0){
             e.atkCd=e.def.atk;
-            const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.2);
+            const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
             damagePlayer(dmg, e);
           }
         } else {
