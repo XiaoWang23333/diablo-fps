@@ -16,8 +16,9 @@
        --safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px);}
   *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-tap-highlight-color:transparent}
   html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#ddd;font-family:"Segoe UI","Microsoft YaHei",sans-serif;
-            touch-action:none;overscroll-behavior:none;-webkit-user-select:none}
-  canvas{display:block}
+            touch-action:none;overscroll-behavior:none;-webkit-user-select:none; cursor:none;}
+  body.uiShow{cursor:default;}
+  canvas{display:block;}
   #crosshair{position:fixed;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);pointer-events:none;z-index:5}
   #crosshair::before,#crosshair::after{content:"";position:absolute;background:#fff;opacity:.85;box-shadow:0 0 2px #000}
   #crosshair::before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
@@ -61,7 +62,7 @@
   .tgl{background:rgba(0,0,0,.6);color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:1px}
   .tgl:hover{border-color:var(--gold);color:#fff}
   .tgl.on{background:rgba(122,217,106,0.18);border-color:#7bd96a;color:#bff7ad}
-  .tgl.canFuse{background:rgba(123,217,106,0.18);border-color:#7bd96a;color:#7bd96a;animation:fuseGlow 1.2s ease-in-out infinite;box-shadow:0 0 12px rgba(123,217,106,.5)}
+  .tgl.canFuse{background:rgba(123,217,106,0.18)!important;border-color:#7bd96a!important;color:#7bd96a!important;animation:fuseGlow 1.2s ease-in-out infinite!important;box-shadow:0 0 12px rgba(123,217,106,.5)!important;font-weight:bold}
   @keyframes fuseGlow{0%,100%{box-shadow:0 0 12px rgba(232,196,90,.5)}50%{box-shadow:0 0 24px rgba(232,196,90,.9)}}
   #toast{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:7;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px}
   .toast-item{background:rgba(0,0,0,.55);padding:4px 10px;border-radius:3px;font-size:13px;border:1px solid #333;animation:fadeUp 2s forwards}
@@ -512,6 +513,7 @@
   <div class="row"><span>击杀</span><span id="sKill">0</span></div>
   <div class="row"><span>区域</span><span id="sArea">血色荒野 #1</span></div>
   <div class="row" style="margin-top:4px;border-top:1px dashed #3a2f18;padding-top:4px"><span>流派</span><span id="sClass" style="font-size:12px;letter-spacing:1px">—</span></div>
+  <div class="row" style="margin-top:4px;padding-top:4px"><span>套装</span><span id="sSet" style="font-size:11px;letter-spacing:1px;color:#7bd96a">无</span></div>
 </div>
 <div id="minimap"><canvas id="mmCanvas" width="180" height="180"></canvas></div>
 <div id="progressPanel">
@@ -837,8 +839,8 @@ class PointerLockControls {
     if(!this.isLocked) return;
     const mx = e.movementX || 0, my = e.movementY || 0;
     this._euler.setFromQuaternion(this.camera.quaternion);
-    this._euler.y -= mx * 0.002 * this.pointerSpeed;
-    this._euler.x -= my * 0.002 * this.pointerSpeed;
+    this._euler.y -= mx * 0.006 * this.pointerSpeed;
+    this._euler.x -= my * 0.006 * this.pointerSpeed;
     this._euler.x = Math.max(-this._PI_2+0.01, Math.min(this._PI_2-0.01, this._euler.x));
     this.camera.quaternion.setFromEuler(this._euler);
   }
@@ -5413,8 +5415,12 @@ function tryPickup(){
     player.inv.push(best.item);
     scene.remove(best.mesh);
     lootDrops.splice(lootDrops.indexOf(best),1);
+    // 方案A：拾取时不显示tip，只显示简单提示
     toast(`拾取：${best.item.name}`);
-    addLootText(best.item);
+    // 修复问题2：恢复右侧文字提示（装备类物品）
+    if(!best.item.isGem && !best.item.special && !best.item.isPotion){
+      showLootToast(best.item);
+    }
     Audio.pickup(best.item.quality.key);
     if(settings.autoEquip) autoEquipBetter(best.item);
     rebuildInv();
@@ -5934,6 +5940,28 @@ function refreshInfo(){
     }).join(' / ');
     const masteryLabel = m.active ? `<span style="color:${CLASS_DB[m.active].color};font-size:11px;margin-left:6px">★ ${CLASS_DB[m.active].name}精通</span>` : '';
     classEl.innerHTML = parts + masteryLabel;
+  }
+  // 修复问题4：显示当前激活的套装效果
+  const setEl = document.getElementById('sSet');
+  if(setEl){
+    let setHtml = '';
+    if(player._setCount){
+      const activeSets = Object.keys(player._setCount).filter(key => player._setCount[key] > 0);
+      if(activeSets.length > 0){
+        setHtml = activeSets.map(key => {
+          const def = SET_DB[key];
+          if(!def) return '';
+          const have = player._setCount[key];
+          const activeBonus = Object.keys(def.bonuses).filter(req => have >= +req);
+          if(activeBonus.length > 0){
+            return `<span style="color:${def.color}">${def.name}${have}/${def.pieces.length}</span>`;
+          } else {
+            return `<span style="color:#666">${def.name}${have}/${def.pieces.length}</span>`;
+          }
+        }).join(' ');
+      }
+    }
+    setEl.innerHTML = setHtml || '<span style="color:#666">无</span>';
   }
   syncUiShow();
 }
@@ -8225,8 +8253,8 @@ function spawnDmgText(worldPos,val,crit){
     d.style.transform=`translateY(-80px) scale(${crit?1.3:1.1})`;
   });
   setTimeout(()=>d.remove(),1100);
-  // 暴击触发屏幕震动
-  if(crit) screenShake(180, 3.5);
+  // 已移除屏幕震动（问题3修复）
+  // if(crit) screenShake(180, 3.5);
 }
 
 // ===== 屏幕震动（建议5）=====
@@ -9169,8 +9197,8 @@ function update(dt){
     } else {
       // 已发现玩家
       e.state='chase';
-      // 远程：保持 prefRng 距离
-      if(isRanged){
+      // 远程：保持 prefRng 距离（暴怒时忽略，直接靠近玩家）
+      if(isRanged && !e.enraged){
         const pref=e.def.prefRng||10;
         if(dist > e.def.rng){
           // 走近到射程
@@ -9187,11 +9215,20 @@ function update(dt){
           const side=new THREE.Vector3(-toP.z,0,toP.x).normalize();
           e.mesh.position.add(side.multiplyScalar(Math.sin(t)*e.spd*0.3*dt));
         }
-        // 射击：在攻击距离内 + CD 到了
+        // 射击：非暴怒远程敌人在攻击距离内 + CD 到了
         if(dist<=e.def.rng && e.atkCd<=0 && player.hp>0){
           e.atkCd=e.def.atk;
           const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
-          // 给玩家位置带一点提前量
+          const aim=pp.clone();
+          spawnEnemyProjectile(e.mesh.position,aim,e.def.projType,dmg,e.def.projColor);
+        }
+      } else if(isRanged) {
+        // 暴怒的远程敌人：直接靠近玩家 + 射击
+        const sp=e.spd*(e.slow>0?.4:1);
+        e.mesh.position.add(toP.clone().normalize().multiplyScalar(sp*dt));
+        if(dist<=e.def.rng && e.atkCd<=0 && player.hp>0){
+          e.atkCd=e.def.atk;
+          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
           const aim=pp.clone();
           spawnEnemyProjectile(e.mesh.position,aim,e.def.projType,dmg,e.def.projColor);
         }
