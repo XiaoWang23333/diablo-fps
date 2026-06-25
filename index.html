@@ -62,7 +62,7 @@
   .tgl{background:rgba(0,0,0,.6);color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;letter-spacing:1px}
   .tgl:hover{border-color:var(--gold);color:#fff}
   .tgl.on{background:rgba(122,217,106,0.18);border-color:#7bd96a;color:#bff7ad}
-  .tgl.canFuse{background:rgba(123,217,106,0.18)!important;border-color:#7bd96a!important;color:#7bd96a!important;animation:fuseGlow 1.2s ease-in-out infinite!important;box-shadow:0 0 12px rgba(123,217,106,.5)!important;font-weight:bold}
+  .tgl.canFuse{background:rgba(123,217,106,0.25)!important;border-color:#7bd96a!important;color:#7bd96a!important;animation:fuseGlow 1.2s ease-in-out infinite!important;box-shadow:0 0 12px rgba(123,217,106,.5)!important;font-weight:bold;text-shadow:0 0 8px rgba(123,217,106,.8)!important}
   @keyframes fuseGlow{0%,100%{box-shadow:0 0 12px rgba(232,196,90,.5)}50%{box-shadow:0 0 24px rgba(232,196,90,.9)}}
   #toast{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:7;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px}
   .toast-item{background:rgba(0,0,0,.55);padding:4px 10px;border-radius:3px;font-size:13px;border:1px solid #333;animation:fadeUp 2s forwards}
@@ -3569,51 +3569,51 @@ function applyEquipStats(){
 //     | 'fuse' (合成 N 次) | 'equip' (装备某品质以上的任意物品)
 //     | 'pickup' (拾取 N 件物品)
 const QUEST_DEFS = [
-  // 入门任务
-  {id:'k_zombie_5',  name:'清扫腐尸',   desc:'击杀 5 只腐尸',    type:'killType', target:'zombie',  max:5,  reward:{exp:60}},
-  {id:'k_skeleton_5',name:'压制射手',   desc:'击杀 5 只骷髅射手', type:'killType', target:'skeleton',max:5,  reward:{exp:80}},
-  {id:'k_any_15',    name:'初出茅庐',   desc:'击杀任意 15 只敌人',type:'kill',                       max:15, reward:{exp:120, quality:'magic'}},
-  {id:'pickup_3',    name:'拾荒者',     desc:'拾取 3 件装备',     type:'pickup',                     max:3,  reward:{exp:40}},
-  {id:'equip_magic', name:'装备升级',   desc:'装备一件魔法品质以上', type:'equip', target:'magic',  max:1,  reward:{exp:80}},
+  // 入门任务（大幅降低经验奖励，避免连升2级）
+  {id:'k_zombie_5',  name:'清扫腐尸',   desc:'击杀 5 只腐尸',    type:'killType', target:'zombie',  max:5,  reward:{exp:5}},
+  {id:'k_skeleton_5',name:'压制射手',   desc:'击杀 5 只骷髅射手', type:'killType', target:'skeleton',max:5,  reward:{exp:8}},
+  {id:'k_any_15',    name:'初出茅庐',   desc:'击杀任意 15 只敌人',type:'kill',                       max:15, reward:{exp:10, quality:'magic'}},
+  {id:'pickup_3',    name:'拾荒者',     desc:'拾取 3 件装备',     type:'pickup',                     max:3,  reward:{exp:3}},
+  {id:'equip_magic', name:'装备升级',   desc:'装备一件魔法品质以上', type:'equip', target:'magic',  max:1,  reward:{exp:8}},
 
-  // 中阶
-  {id:'k_ghoul_8',   name:'食尸鬼之灾', desc:'击杀 8 只食尸鬼',   type:'killType', target:'ghoul',   max:8,  reward:{exp:160}},
-  {id:'k_imp_8',     name:'恶魔猎人',   desc:'击杀 8 只小恶魔',   type:'killType', target:'imp',     max:8,  reward:{exp:160}},
-  {id:'wave_3',      name:'三波试炼',   desc:'抵达第 3 波',       type:'wave',                       max:3,  reward:{exp:200, quality:'rare'}},
-  {id:'fuse_1',      name:'合成学徒',   desc:'完成 1 次合成',     type:'fuse',                       max:1,  reward:{exp:120}},
-  {id:'k_any_50',    name:'血色荒野',   desc:'累计击杀 50 只敌人',type:'kill',                       max:50, reward:{exp:300, quality:'rare'}},
+  // 中阶（大幅降低经验奖励）
+  {id:'k_ghoul_8',   name:'食尸鬼之灾', desc:'击杀 8 只食尸鬼',   type:'killType', target:'ghoul',   max:8,  reward:{exp:15}},
+  {id:'k_imp_8',     name:'恶魔猎人',   desc:'击杀 8 只小恶魔',   type:'killType', target:'imp',     max:8,  reward:{exp:15}},
+  {id:'wave_3',      name:'三波试炼',   desc:'抵达第 3 波',       type:'wave',                       max:3,  reward:{exp:20, quality:'rare'}},
+  {id:'fuse_1',      name:'合成学徒',   desc:'完成 1 次合成',     type:'fuse',                       max:1,  reward:{exp:10}},
+  {id:'k_any_50',    name:'血色荒野',   desc:'累计击杀 50 只敌人',type:'kill',                       max:50, reward:{exp:25, quality:'rare'}},
 
-  // 高阶
-  {id:'k_knight_1',  name:'BOSS 狩猎',  desc:'击败 1 只死亡骑士', type:'killType', target:'knight',  max:1,  reward:{exp:500, quality:'set'}},
-  {id:'wave_5',      name:'波次战神',   desc:'抵达第 5 波',       type:'wave',                       max:5,  reward:{exp:400, quality:'set'}},
-  {id:'fuse_5',      name:'合成大师',   desc:'完成 5 次合成',     type:'fuse',                       max:5,  reward:{exp:400, quality:'rare'}},
-  {id:'equip_rare',  name:'稀有荣耀',   desc:'装备一件稀有品质以上', type:'equip', target:'rare',   max:1,  reward:{exp:300}},
-  {id:'k_any_200',   name:'破坏神之路',desc:'累计击杀 200 只敌人',type:'kill',                       max:200,reward:{exp:1500, quality:'unique'}},
+  // 高阶（大幅降低经验奖励）
+  {id:'k_knight_1',  name:'BOSS 狩猎',  desc:'击败 1 只死亡骑士', type:'killType', target:'knight',  max:1,  reward:{exp:50, quality:'set'}},
+  {id:'wave_5',      name:'波次战神',   desc:'抵达第 5 波',       type:'wave',                       max:5,  reward:{exp:40, quality:'set'}},
+  {id:'fuse_5',      name:'合成大师',   desc:'完成 5 次合成',     type:'fuse',                       max:5,  reward:{exp:40, quality:'rare'}},
+  {id:'equip_rare',  name:'稀有荣耀',   desc:'装备一件稀有品质以上', type:'equip', target:'rare',   max:1,  reward:{exp:30}},
+  {id:'k_any_200',   name:'破坏神之路',desc:'累计击杀 200 只敌人',type:'kill',                       max:200,reward:{exp:150, quality:'unique'}},
 
-  // ===== 进阶任务（v0.21+）=====
-  {id:'k_zombie_30',  name:'腐尸清道夫',  desc:'累计击杀 30 只腐尸',     type:'killType', target:'zombie',  max:30, reward:{exp:600,  quality:'rare'}},
-  {id:'k_skeleton_30',name:'弓的老师',    desc:'累计击杀 30 只骷髅射手', type:'killType', target:'skeleton',max:30, reward:{exp:600,  quality:'rare'}},
-  {id:'k_ghoul_30',   name:'食尸鬼克星',  desc:'累计击杀 30 只食尸鬼',   type:'killType', target:'ghoul',   max:30, reward:{exp:700,  quality:'rare'}},
-  {id:'k_imp_30',     name:'地狱狩猎',    desc:'累计击杀 30 只小恶魔',   type:'killType', target:'imp',     max:30, reward:{exp:700,  quality:'rare'}},
-  {id:'k_knight_3',   name:'死亡骑士终结',desc:'击败 3 只死亡骑士',     type:'killType', target:'knight',  max:3,  reward:{exp:900,  quality:'set'}},
-  {id:'k_frost_2',    name:'冰封王座',    desc:'击败 2 只冰霜领主',     type:'killType', target:'frostlord',max:2, reward:{exp:1000, quality:'set'}},
-  {id:'k_overlord_3', name:'王者归来',    desc:'击败 3 次远古霸主',     type:'killType', target:'overlord',max:3,  reward:{exp:3000, quality:'unique'}},
+  // ===== 进阶任务（v0.21+）—— 大幅降低经验奖励 =====
+  {id:'k_zombie_30',  name:'腐尸清道夫',  desc:'累计击杀 30 只腐尸',     type:'killType', target:'zombie',  max:30, reward:{exp:30,  quality:'rare'}},
+  {id:'k_skeleton_30',name:'弓箭老师',    desc:'累计击杀 30 只骷髅射手', type:'killType', target:'skeleton',max:30, reward:{exp:30,  quality:'rare'}},
+  {id:'k_ghoul_30',   name:'食尸鬼克星',  desc:'累计击杀 30 只食尸鬼',   type:'killType', target:'ghoul',   max:30, reward:{exp:80,  quality:'rare'}},
+  {id:'k_imp_30',     name:'地狱狩猎',    desc:'累计击杀 30 只小恶魔',   type:'killType', target:'imp',     max:30, reward:{exp:80,  quality:'rare'}},
+  {id:'k_knight_3',   name:'死亡骑士终结',desc:'击败 3 只死亡骑士',     type:'killType', target:'knight',  max:3,  reward:{exp:80, quality:'set'}},
+  {id:'k_frost_2',    name:'冰封王座',    desc:'击败 2 只冰霜领主',     type:'killType', target:'frostlord',max:2, reward:{exp:120, quality:'set'}},
+  {id:'k_overlord_3', name:'王者归来',    desc:'击败 3 次远古霸主',     type:'killType', target:'overlord',max:3,  reward:{exp:100, quality:'unique'}},
 
-  {id:'wave_8',       name:'征途八波',    desc:'抵达第 8 波',           type:'wave', max:8,  reward:{exp:300}},
-  {id:'wave_15',      name:'血色试炼',    desc:'抵达第 15 波',          type:'wave', max:15, reward:{exp:800,  quality:'set'}},
-  {id:'wave_20',      name:'征服者',      desc:'抵达第 20 波（最终战）',type:'wave', max:20, reward:{exp:1500, quality:'unique'}},
+  {id:'wave_8',       name:'征途八波',    desc:'抵达第 8 波',           type:'wave', max:8,  reward:{exp:50}},
+  {id:'wave_15',      name:'血色试炼',    desc:'抵达第 15 波',          type:'wave', max:15, reward:{exp:200,  quality:'set'}},
+  {id:'wave_20',      name:'征服者',      desc:'抵达第 20 波（最终战）',type:'wave', max:20, reward:{exp:150, quality:'unique'}},
 
-  {id:'fuse_10',      name:'合成宗师',    desc:'完成 10 次合成',        type:'fuse', max:10, reward:{exp:800,  quality:'set'}},
-  {id:'fuse_25',      name:'合成传说',    desc:'完成 25 次合成',        type:'fuse', max:25, reward:{exp:1800, quality:'unique'}},
+  {id:'fuse_10',      name:'合成宗师',    desc:'完成 10 次合成',        type:'fuse', max:10, reward:{exp:100,  quality:'set'}},
+  {id:'fuse_25',      name:'合成传说',    desc:'完成 25 次合成',        type:'fuse', max:25, reward:{exp:200, quality:'unique'}},
 
-  {id:'pickup_30',    name:'拾荒大师',    desc:'拾取 30 件装备',        type:'pickup',max:30, reward:{exp:600,  quality:'rare'}},
-  {id:'pickup_100',   name:'集邮狂人',    desc:'拾取 100 件装备',       type:'pickup',max:100,reward:{exp:1500, quality:'unique'}},
+  {id:'pickup_30',    name:'拾荒大师',    desc:'拾取 30 件装备',        type:'pickup',max:30, reward:{exp:50,  quality:'rare'}},
+  {id:'pickup_100',   name:'集邮狂人',    desc:'拾取 100 件装备',       type:'pickup',max:100,reward:{exp:150, quality:'unique'}},
 
-  {id:'equip_set',    name:'套装收藏',    desc:'装备一件套装品质以上',  type:'equip', target:'set',    max:1, reward:{exp:600,  quality:'set'}},
-  {id:'equip_unique', name:'传说降临',    desc:'装备一件暗金品质',      type:'equip', target:'unique', max:1, reward:{exp:1200, quality:'unique'}},
+  {id:'equip_set',    name:'套装收藏',    desc:'装备一件套装品质以上',  type:'equip', target:'set',    max:1, reward:{exp:50,  quality:'set'}},
+  {id:'equip_unique', name:'传说降临',    desc:'装备一件暗金品质',      type:'equip', target:'unique', max:1, reward:{exp:150, quality:'unique'}},
 
-  {id:'k_any_500',    name:'血色无尽',    desc:'累计击杀 500 只敌人',   type:'kill', max:500, reward:{exp:3500, quality:'unique'}},
-  {id:'k_any_1000',   name:'万千罹难',    desc:'累计击杀 1000 只敌人',  type:'kill', max:1000,reward:{exp:8000, quality:'unique'}},
+  {id:'k_any_500',    name:'血色无尽',    desc:'累计击杀 500 只敌人',   type:'kill', max:500, reward:{exp:300, quality:'unique'}},
+  {id:'k_any_1000',   name:'万千罹难',    desc:'累计击杀 1000 只敌人',  type:'kill', max:1000,reward:{exp:500, quality:'unique'}},
 ];
 const QualityRank = { common:0, magic:1, rare:2, set:3, unique:4 };
 
@@ -5940,6 +5940,21 @@ function refreshInfo(){
     }).join(' / ');
     const masteryLabel = m.active ? `<span style="color:${CLASS_DB[m.active].color};font-size:11px;margin-left:6px">★ ${CLASS_DB[m.active].name}精通</span>` : '';
     classEl.innerHTML = parts + masteryLabel;
+    // 修复问题4：给流派标签添加点击事件，显示套装效果
+    classEl.querySelectorAll('span').forEach(span => {
+      span.style.cursor = 'pointer';
+      span.addEventListener('click', function() {
+        const ctag = this.getAttribute('data-ctag');
+        if(ctag && window.showClassMastery) {
+          window.showClassMastery({ getAttribute: () => ctag });
+        }
+      });
+      // 添加 data-ctag 属性，供 showClassMastery 读取
+      const idx = Array.from(classEl.querySelectorAll('span')).indexOf(span);
+      if(idx >= 0 && idx < CLASS_KEYS.length) {
+        span.setAttribute('data-ctag', CLASS_KEYS[idx]);
+      }
+    });
   }
   // 修复问题4：显示当前激活的套装效果
   const setEl = document.getElementById('sSet');
@@ -8966,7 +8981,12 @@ function update(dt){
       l.item.isNew=true;
       player.inv.push(l.item);
       scene.remove(l.mesh);lootDrops.splice(i,1);
-      addLootText(l.item);
+      // 修复问题2：自动拾取也不显示tip，只显示简单提示
+      toast(`拾取：${l.item.name}`);
+      // 右侧文字提示（装备类物品）
+      if(!l.item.isGem && !l.item.special && !l.item.isPotion){
+        showLootToast(l.item);
+      }
       Audio.pickup(l.item.quality.key);
       if(settings.autoEquip) autoEquipBetter(l.item);
       rebuildInv();
@@ -9152,8 +9172,8 @@ function update(dt){
       continue; // 冲锋时不走下面的常规 AI
     }
 
-    // ===== "逾期未清"暴怒机制：出生 60 秒未死 → 主动锁定玩家 =====
-    if(!e.enraged && performance.now() - e.spawnedAt > 60000){
+    // ===== "逾期未清"暴怒机制：出生 20 秒未死 → 主动锁定玩家（加快暴怒） =====
+    if(!e.enraged && performance.now() - e.spawnedAt > 20000){
       e.enraged = true;
       // 视野和缠绕距离扩到无限大；状态切到追击
       e.aggro = 9999;
@@ -9218,7 +9238,7 @@ function update(dt){
         // 射击：非暴怒远程敌人在攻击距离内 + CD 到了
         if(dist<=e.def.rng && e.atkCd<=0 && player.hp>0){
           e.atkCd=e.def.atk;
-          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
+          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.18);
           const aim=pp.clone();
           spawnEnemyProjectile(e.mesh.position,aim,e.def.projType,dmg,e.def.projColor);
         }
@@ -9228,7 +9248,7 @@ function update(dt){
         e.mesh.position.add(toP.clone().normalize().multiplyScalar(sp*dt));
         if(dist<=e.def.rng && e.atkCd<=0 && player.hp>0){
           e.atkCd=e.def.atk;
-          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
+          const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.18);
           const aim=pp.clone();
           spawnEnemyProjectile(e.mesh.position,aim,e.def.projType,dmg,e.def.projColor);
         }
@@ -9238,7 +9258,7 @@ function update(dt){
           e.state='attack';
           if(e.atkCd<=0 && player.hp>0){
             e.atkCd=e.def.atk;
-            const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.12);
+            const dmg=rand(e.def.dmg[0],e.def.dmg[1])*e.dmgBuff*(1+e.level*.18);
             damagePlayer(dmg, e);
           }
         } else {
